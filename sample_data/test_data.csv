@@ -1,0 +1,5 @@
+image
+./sample_data/test/Diffusion-MRI/B0/0826s1_21_vol_0000.nii.gz
+./sample_data/test/Diffusion-MRI/B1/0779s1_17_vol_0001.nii.gz
+./sample_data/test/T2-weighted-MRI/f0832s1/fetus_03.nii.gz
+./sample_data/test/T2-weighted-MRI/FCB035s1/fetus_21.nii.gz
