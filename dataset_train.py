@@ -2,7 +2,10 @@ import os
 import pandas as pd
 from medpy.io import load
 import torchio as tio
+
 from torch.utils.data import Dataset
+
+from utils import verify_segmentation_dataset
 
 
 class FetalBrainDataset(Dataset):
@@ -43,8 +46,7 @@ def create_dataset_csv(images_folder, masks_folder):
     images_paths = sorted([os.path.join(images_folder, f) for f in os.listdir(images_folder)])
     masks_paths = sorted([os.path.join(masks_folder, f) for f in os.listdir(masks_folder)])
 
-    assert len(images_paths) == len(masks_paths), \
-        'number of images and number of masks do not match'.format(len(images_paths), len(masks_paths))
+    verify_segmentation_dataset(images_paths, masks_paths)
 
     _paths = []
     x = []
@@ -89,5 +91,3 @@ def preprocess(input_tio, img_size=224, intensity=False):
     preprocessed_tio = prep_transform(input_tio)
 
     return preprocessed_tio
-
-

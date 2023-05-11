@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 
@@ -43,3 +45,17 @@ class DiceLoss(nn.Module):
             class_wise_dice.append(1.0 - dice.item())
             loss += dice * weight[i]
         return loss / self.n_classes
+
+
+def verify_segmentation_dataset(images_list, masks_list):
+    print(len(images_list))
+    print(len(masks_list))
+    assert len(images_list) == len(masks_list), \
+        "Found error during data loading: number of images and number of masks do not match"
+
+    for item in range(len(images_list)):
+        name = os.path.basename(images_list[item])
+        mask_name = os.path.join(os.path.dirname(masks_list[item]), 'mask' + name[3:])
+
+        assert mask_name in masks_list, \
+            "Found error during data loading: No mask was found for\n{0}".format(str(name))

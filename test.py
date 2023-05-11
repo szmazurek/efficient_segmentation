@@ -4,8 +4,10 @@ import numpy as np
 
 import torch
 import torchio as tio
+
 from network import UNet
 from dataset_train import preprocess
+from utils import verify_segmentation_dataset
 
 
 def test_one_volume(model, input_volume_path, device):
@@ -37,6 +39,7 @@ def test(args):
     masks_folder = os.path.join(args.testing_data_path, "masks")
     images_paths = sorted([os.path.join(images_folder, f) for f in os.listdir(images_folder)])
     masks_paths = sorted([os.path.join(masks_folder, f) for f in os.listdir(masks_folder)])
+    verify_segmentation_dataset(images_paths, masks_paths)
 
     assert len(images_paths) == len(masks_paths), \
         'number of images and number of masks do not match'.format(len(images_paths), len(masks_paths))

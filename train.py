@@ -2,7 +2,7 @@ import os
 import torch
 from network import UNet
 from dataset_train import FetalBrainDataset, preprocess
-from loss import DiceLoss
+from utils import DiceLoss
 
 
 def train(args):

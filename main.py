@@ -6,7 +6,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', default=50, type=int)
 parser.add_argument('--batch_size', default=16, type=int)
-parser.add_argument('--device', type=str, default="cuda:0", help="Set the device to run the program")
+parser.add_argument('--device', type=str, default="cuda:1", help="Set the device to run the program")
 parser.add_argument('--training_data_path', type=str, help="Set the path to training dataset")
 parser.add_argument('--testing_data_path', type=str, help="Set the path to testing data (for internal testing")
 parser.add_argument('--lr', default=0.1, type=float, help="Learning rate")
