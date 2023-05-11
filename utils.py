@@ -48,8 +48,6 @@ class DiceLoss(nn.Module):
 
 
 def verify_segmentation_dataset(images_list, masks_list):
-    print(len(images_list))
-    print(len(masks_list))
     assert len(images_list) == len(masks_list), \
         "Found error during data loading: number of images and number of masks do not match"
 
