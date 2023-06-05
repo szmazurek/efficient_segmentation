@@ -1,7 +1,7 @@
 # [E2MIP Challenge](https://e2mip.github.io/), MICCAI 2023
 ## Starting point for E2MIP challenge, task 3: Segmentation of an unknown dataset (fetal brain MRI)
 
-This repository can be used as a starting point for the E2MIP challenge on the Fetal brain MRI dataset.
+This repository can be used as a starting point for the E2MIP challenge on the fetal brain MRI dataset.
 
 This repository contains:
 1. information about the submission for the task 3 of the challenge
