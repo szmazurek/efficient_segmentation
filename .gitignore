@@ -1,3 +1,6 @@
 __pycache__/
 models
-data/test_results_saved
+data/test_results/
+output_files
+wandb_api_key.txt
+*logs/

@@ -1,20 +1,26 @@
 import os
 import torch
-from network import UNet
+import lightning.pytorch as pl
+from network import UNet, LightningUnet
 from dataset_train import FetalBrainDataset, preprocess
 from utils import DiceLoss
+
 
 def train(args):
     # Set up dataset and data loaders
     images_folder = os.path.join(args.training_data_path, "images")
     masks_folder = os.path.join(args.training_data_path, "masks")
-    train_dataset = FetalBrainDataset(images_folder, masks_folder, img_size=224, transform=preprocess)
-    train_dataloader = torch.utils.data.DataLoader(train_dataset,
-                                                   batch_size=args.batch_size,
-                                                   shuffle=True,
-                                                   num_workers=8,
-                                                   pin_memory=True,
-                                                   drop_last=True)
+    train_dataset = FetalBrainDataset(
+        images_folder, masks_folder, img_size=224, transform=preprocess
+    )
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=8,
+        pin_memory=True,
+        drop_last=True,
+    )
 
     # Set up device
     device = torch.device(args.device)
@@ -44,3 +50,68 @@ def train(args):
 
         # Save model checkpoint
         torch.save(model.state_dict(), f"model_checkpoint_epoch_{epoch}.pt")
+
+
+def train_lightning(args):
+    images_folder = os.path.join(args.training_data_path, "images")
+    masks_folder = os.path.join(args.training_data_path, "masks")
+    main_dataset = FetalBrainDataset(
+        images_folder, masks_folder, img_size=224, transform=preprocess
+    )
+
+    train_dataset, val_dataset = torch.utils.data.random_split(main_dataset, [0.9, 0.1])
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
+    )
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
+    )
+    model = LightningUnet()
+    model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        save_top_k=1, mode="min", monitor="val_loss"
+    )
+    early_stopping_callback = pl.callbacks.EarlyStopping(
+        monitor="val_loss", patience=6, mode="min", verbose=True
+    )
+    if args.wandb:
+        api_key = open("wandb_api_key.txt", "r")
+        key = api_key.read()
+        api_key.close()
+        os.environ["WANDB_API_KEY"] = key
+        wandb_logger = pl.loggers.WandbLogger(
+            project="E2MIP_Challenge_FetalBrainSegmentation",
+            entity="mazurek",
+            log_model=False,
+        )
+    visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
+    strategy = (
+        pl.strategies.SingleDeviceStrategy(device=args.device)
+        if visible_devices == 1
+        else pl.strategies.DDPStrategy(find_unused_parameters=False)
+    )
+    print(f"Using {visible_devices} devices for training.")
+    torch.set_float32_matmul_precision("medium")
+    trainer = pl.Trainer(
+        devices="auto",
+        precision="16-mixed",
+        enable_model_summary=False,
+        max_epochs=args.epochs,
+        logger=wandb_logger if args.wandb else None,
+        callbacks=[model_checkpoint_callback, early_stopping_callback],
+        log_every_n_steps=1,
+    )
+
+    trainer.fit(model, train_dataloader, val_loader)
+    print("Finished training.")

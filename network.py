@@ -1,14 +1,20 @@
 """ source: https://github.com/mateuszbuda/brain-segmentation-pytorch/blob/master/unet.py"""
 
 from collections import OrderedDict
-
+import lightning.pytorch as pl
 import torch
 import torch.nn as nn
+from utils import DiceLoss
+from torchmetrics import Dice
 
 
 class UNet(nn.Module):
-
-    def __init__(self, in_channels=1, out_channels=2, init_features=64):
+    def __init__(
+        self,
+        in_channels=1,
+        out_channels=2,
+        init_features=64,
+    ):
         super(UNet, self).__init__()
 
         features = init_features
@@ -99,3 +105,81 @@ class UNet(nn.Module):
                 ]
             )
         )
+
+
+class LightningUnet(pl.LightningModule):
+    def __init__(self, in_channels=1, out_channels=2, init_features=64, lr=1e-3):
+        super().__init__()
+        self.model = UNet(in_channels, out_channels, init_features)
+        self.loss = DiceLoss(out_channels)
+        self.dice_score = Dice(num_classes=out_channels)
+        self.lr = lr
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = self.loss(y_hat, y)
+        dice_score = self.dice_score(y_hat, y)
+        self.log(
+            "dice_score",
+            dice_score,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )  ##disable for final version
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = self.loss(y_hat, y)
+        dice_score = self.dice_score(y_hat, y)
+        self.log(
+            "val_dice_score",
+            dice_score,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True
+        )
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = self.loss(y_hat, y)
+        dice_score = self.dice_score(y_hat, y)
+        self.log(
+            "test_dice_score",
+            dice_score,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True
+        )
+        return loss
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        x, _ = batch
+        y_hat = self(x)
+        return y_hat
+
+    # def save_prediction_batch(self,result_mask):
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optimizer
