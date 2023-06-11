@@ -40,7 +40,7 @@ def train(args):
             running_loss += loss.item()
 
         # Print training and test metrics
-        print(f"Epoch {epoch}: train_loss = {running_loss / len(train_dataloader):.4f}")
+        print(f"Epoch {epoch}: train_loss = {running_loss / i+1:.4f}")
 
         # Save model checkpoint
         torch.save(model.state_dict(), f"model_checkpoint_epoch_{epoch}.pt")
