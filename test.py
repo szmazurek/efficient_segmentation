@@ -45,8 +45,9 @@ def test(args):
         'number of images and number of masks do not match'.format(len(images_paths), len(masks_paths))
 
     # Load the model
-    model = UNet().to(args.device)
-    msg = model.load_state_dict(torch.load(args.checkpoint_path))
+    device = torch.device(args.device)
+    model = UNet().to(device)
+    msg = model.load_state_dict(torch.load(args.model_path))
     print("model loaded", msg)
 
     # Set model to eval mode
@@ -57,14 +58,13 @@ def test(args):
         for idx in range(len(images_paths)):
             predicted_mask = test_one_volume(model=model, input_volume_path=images_paths[idx], device=args.device)
             actual_mask = tio.LabelMap(masks_paths[idx])
+            if args.test_results_save_path:
+                os.makedirs(args.test_results_save_path, exist_ok=True)
+                save_name = os.path.basename(masks_paths[idx])
 
-        if args.save_path:
-            os.makedirs(args.save_path, exist_ok=True)
-            save_name = os.path.basename(masks_paths[idx])
+                result_mask = tio.LabelMap(tensor=predicted_mask[None], affine=actual_mask.affine)
 
-            result_mask = tio.LabelMap(tensor=predicted_mask[None], affine=actual_mask.affine)
+                # write the image
+                result_mask.save(os.path.join(args.test_results_save_path, save_name))
 
-            # write the image
-            result_mask.save(os.path.join(args.save_path, save_name))
-
-    return "Testing Finished!"
+    print("Testing complete!")

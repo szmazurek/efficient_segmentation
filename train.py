@@ -4,7 +4,6 @@ from network import UNet
 from dataset_train import FetalBrainDataset, preprocess
 from utils import DiceLoss
 
-
 def train(args):
     # Set up dataset and data loaders
     images_folder = os.path.join(args.training_data_path, "images")
@@ -18,7 +17,7 @@ def train(args):
                                                    drop_last=True)
 
     # Set up device
-    device = args.device
+    device = torch.device(args.device)
 
     # Set up model, optimizer, and criterion
     model = UNet().to(device)
@@ -26,6 +25,7 @@ def train(args):
     criterion = DiceLoss(n_classes=args.num_classes)
 
     # Train for multiple epochs
+    print("Initializing training...")
     for epoch in range(args.epochs):
         model.train()
         running_loss = 0.0
@@ -38,7 +38,7 @@ def train(args):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
-
+            print(f"Completed batch {i+1} of epoch {epoch+1}")
         # Print training and test metrics
         print(f"Epoch {epoch}: train_loss = {running_loss / i+1:.4f}")
 
