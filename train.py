@@ -1,7 +1,9 @@
 import os
 import torch
 import lightning.pytorch as pl
-from network import UNet, LightningUnet
+
+# from network import UNet, LightningUnet
+from models.lightning_module import LightningModel
 from dataset_train import FetalBrainDataset, preprocess
 from utils import DiceLoss
 
@@ -26,7 +28,7 @@ def train(args):
     device = torch.device(args.device)
 
     # Set up model, optimizer, and criterion
-    model = UNet().to(device)
+    model = LightningModel(in_shape=(None, 1, 224, 224)).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     criterion = DiceLoss(n_classes=args.num_classes)
 
@@ -59,7 +61,9 @@ def train_lightning(args):
         images_folder, masks_folder, img_size=224, transform=preprocess
     )
 
-    train_dataset, val_dataset = torch.utils.data.random_split(main_dataset, [0.9, 0.1])
+    train_dataset, val_dataset = torch.utils.data.random_split(
+        main_dataset, [0.9, 0.1]
+    )
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -78,12 +82,19 @@ def train_lightning(args):
         prefetch_factor=2,
         drop_last=False,
     )
-    model = LightningUnet()
+    # models ['Unet', 'AttSqueezeUNet']
+    # losses ['DiceLoss', 'MCCLoss']
+    model = LightningModel(
+        loss="MCCLoss",
+        model="Unet",
+        in_shape=(None, 1, 224, 224),
+        lr=args.lr,
+    )
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
         save_top_k=1, mode="min", monitor="val_loss"
     )
     early_stopping_callback = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=6, mode="min", verbose=True
+        monitor="val_loss", patience=15, mode="min", verbose=True
     )
     if args.wandb:
         api_key = open("wandb_api_key.txt", "r")
@@ -106,11 +117,13 @@ def train_lightning(args):
     trainer = pl.Trainer(
         devices="auto",
         precision="16-mixed",
+        strategy=strategy,
         enable_model_summary=False,
         max_epochs=args.epochs,
         logger=wandb_logger if args.wandb else None,
         callbacks=[model_checkpoint_callback, early_stopping_callback],
         log_every_n_steps=1,
+        sync_batchnorm=True,
     )
 
     trainer.fit(model, train_dataloader, val_loader)

@@ -24,17 +24,23 @@ class FetalBrainDataset(Dataset):
 
         # Create TorchIO data
         img_array = tio.ScalarImage(img_path)
-        img_array_ = tio.ScalarImage(tensor=img_array.data[:, :, :, None, slice_idx].float(), affine=img_array.affine)
+        img_array_ = tio.ScalarImage(
+            tensor=img_array.data[:, :, :, None, slice_idx].float(),
+            affine=img_array.affine,
+        )
         label_array = tio.LabelMap(label_path)
-        label_array_ = tio.LabelMap(tensor=label_array.data[:, :, :, None, slice_idx].long(), affine=img_array.affine)
+        label_array_ = tio.LabelMap(
+            tensor=label_array.data[:, :, :, None, slice_idx].long(),
+            affine=img_array.affine,
+        )
         subject = tio.Subject(img=img_array_, label=label_array_)
 
         if self.transform:
             subject = self.transform(subject, img_size=self.img_size, intensity=True)
 
         # Get values from tio data
-        img_data = subject['img']['data'].squeeze()
-        label_data = subject['label']['data'].squeeze()
+        img_data = subject["img"]["data"].squeeze()
+        label_data = subject["label"]["data"].squeeze()
 
         img = img_data[None].float()
         label = label_data.long()
@@ -43,8 +49,12 @@ class FetalBrainDataset(Dataset):
 
 
 def create_dataset_csv(images_folder, masks_folder):
-    images_paths = sorted([os.path.join(images_folder, f) for f in os.listdir(images_folder)])
-    masks_paths = sorted([os.path.join(masks_folder, f) for f in os.listdir(masks_folder)])
+    images_paths = sorted(
+        [os.path.join(images_folder, f) for f in os.listdir(images_folder)]
+    )
+    masks_paths = sorted(
+        [os.path.join(masks_folder, f) for f in os.listdir(masks_folder)]
+    )
 
     verify_segmentation_dataset(images_paths, masks_paths)
 
@@ -66,26 +76,32 @@ def create_dataset_csv(images_folder, masks_folder):
         y.append(label)
         index.append(k)
 
-    path_df = pd.DataFrame({'image': x, 'mask': y, 'slice': index})
+    path_df = pd.DataFrame({"image": x, "mask": y, "slice": index})
     return path_df
 
 
 def preprocess(input_tio, img_size=224, intensity=False):
-    target_spacing = (input_tio.shape[1] * input_tio.spacing[0] / (img_size - 1),
-                      input_tio.shape[1] * input_tio.spacing[1] / (img_size - 1),
-                      1)
+    target_spacing = (
+        input_tio.shape[1] * input_tio.spacing[0] / (img_size - 1),
+        input_tio.shape[1] * input_tio.spacing[1] / (img_size - 1),
+        1,
+    )
 
     if intensity:
-        prep_transform = tio.Compose([
-            tio.Resample(target_spacing),
-            tio.CropOrPad((img_size, img_size, input_tio.shape[-1])),
-            tio.RescaleIntensity(out_min_max=(0, 1.0), percentiles=(0.5, 99.5))
-        ])
+        prep_transform = tio.Compose(
+            [
+                tio.Resample(target_spacing),
+                tio.CropOrPad((img_size, img_size, input_tio.shape[-1])),
+                tio.RescaleIntensity(out_min_max=(0, 1.0), percentiles=(0.5, 99.5)),
+            ]
+        )
     else:
-        prep_transform = tio.Compose([
-            tio.Resample(target_spacing),
-            tio.CropOrPad((img_size, img_size, input_tio.shape[-1])),
-        ])
+        prep_transform = tio.Compose(
+            [
+                tio.Resample(target_spacing),
+                tio.CropOrPad((img_size, img_size, input_tio.shape[-1])),
+            ]
+        )
 
     # Apply preprocessing to images and segmentation maps
     preprocessed_tio = prep_transform(input_tio)

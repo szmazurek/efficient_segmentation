@@ -3,11 +3,15 @@ from test import test, test_lightning
 
 import argparse
 
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--epochs", default=50, type=int)
+parser.add_argument("--epochs", default=100, type=int)
 parser.add_argument("--batch_size", default=16, type=int)
 parser.add_argument(
-    "--device", type=str, default="cuda:0", help="Set the device to run the program"
+    "--device",
+    type=str,
+    default="cuda:0",
+    help="Set the device to run the program",
 )
 parser.add_argument(
     "--training_data_path", type=str, help="Set the path to training dataset"
@@ -25,7 +29,9 @@ parser.add_argument(
     "--test", action="store_true", default=False, help="Use True for testing"
 )
 parser.add_argument(
-    "--test_results_save_path", type=str, help="Set the path to save the test results"
+    "--test_results_save_path",
+    type=str,
+    help="Set the path to save the test results",
 )
 parser.add_argument(
     "--model_path", type=str, help="Set the path of the model to be tested"

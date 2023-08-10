@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
-#SBATCH --mem-per-cpu=10GB
+#SBATCH --mem-per-cpu=15GB
 ## Maksymalny czas trwania zlecenia (format HH:MM:SS)
 #SBATCH --time=00:10:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
@@ -22,4 +22,4 @@
 ml CUDA/11.7
 conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
-srun python main.py --test --testing_data_path data/testing_data --model_path "lightning_logs/version_3/checkpoints/epoch=46-step=940.ckpt" --test_results_save_path data/test_results
+srun python main.py --test --testing_data_path data/training_data --model_path "lightning_logs/version_53/checkpoints/epoch=61-step=310.ckpt" --test_results_save_path data/test_results

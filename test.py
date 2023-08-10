@@ -5,9 +5,11 @@ import numpy as np
 import torch
 import torchio as tio
 
-from network import UNet, LightningUnet
+from models.torch_models import UNet
+from models.lightning_module import LightningModel
 from dataset_train import preprocess
 from utils import verify_segmentation_dataset
+from torchmetrics import Dice
 
 
 def test_one_volume(model, input_volume_path, device):
@@ -16,7 +18,8 @@ def test_one_volume(model, input_volume_path, device):
 
     for test_data_idx in range(image.shape[-1]):
         img_array = tio.ScalarImage(
-            tensor=image.data[:, :, :, None, test_data_idx].float(), affine=image.affine
+            tensor=image.data[:, :, :, None, test_data_idx].float(),
+            affine=image.affine,
         )
 
         img_array = preprocess(img_array, img_size=224, intensity=True)
@@ -28,7 +31,9 @@ def test_one_volume(model, input_volume_path, device):
         label_array = tio.LabelMap(
             tensor=outputs[:, :, :, None].cpu().long(), affine=img_array.affine
         )
-        label_array = preprocess(label_array, img_size=image.shape[1], intensity=False)
+        label_array = preprocess(
+            label_array, img_size=image.shape[1], intensity=False
+        )
 
         out = label_array["data"].squeeze().cpu().detach().numpy()
         prediction[:, :, test_data_idx] = out
@@ -67,7 +72,9 @@ def test(args):
     with torch.no_grad():
         for idx in range(len(images_paths)):
             predicted_mask = test_one_volume(
-                model=model, input_volume_path=images_paths[idx], device=args.device
+                model=model,
+                input_volume_path=images_paths[idx],
+                device=args.device,
             )
             actual_mask = tio.LabelMap(masks_paths[idx])
             if args.test_results_save_path:
@@ -79,7 +86,9 @@ def test(args):
                 )
 
                 # write the image
-                result_mask.save(os.path.join(args.test_results_save_path, save_name))
+                result_mask.save(
+                    os.path.join(args.test_results_save_path, save_name)
+                )
 
     print("Testing complete!")
 
@@ -103,14 +112,25 @@ def test_lightning(args):
 
     # Load the model
     device = torch.device(args.device)
-    model = LightningUnet.load_from_checkpoint(args.model_path)
-
+    model = LightningModel.load_from_checkpoint(
+        args.model_path,
+        in_shape=(None, 1, 224, 224),
+        loss="MCCLoss",
+        model="Unet",
+    )
+    dice_metric = Dice(reduction="micro", multiclass=False)
     with torch.no_grad():
+        dice_score = 0.0
         for idx in range(len(images_paths)):
             predicted_mask = test_one_volume(
                 model=model, input_volume_path=images_paths[idx], device=device
             )
             actual_mask = tio.LabelMap(masks_paths[idx])
+            perm_mask_pred = torch.from_numpy(predicted_mask).int()
+
+            actual_mask_perm = actual_mask.data.squeeze().int()
+
+            dice_score += dice_metric(perm_mask_pred, actual_mask_perm).item()
             if args.test_results_save_path:
                 os.makedirs(args.test_results_save_path, exist_ok=True)
                 save_name = os.path.basename(masks_paths[idx])
@@ -120,4 +140,7 @@ def test_lightning(args):
                 )
 
                 # write the image
-                result_mask.save(os.path.join(args.test_results_save_path, save_name))
+                result_mask.save(
+                    os.path.join(args.test_results_save_path, save_name)
+                )
+        print("Dice score: ", dice_score / len(images_paths))
