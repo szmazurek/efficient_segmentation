@@ -1,9 +1,10 @@
-from train import train, train_lightning
-from test import test, test_lightning
+from train import train_lightning
+from test import test_lightning
 
 import argparse
 
-
+AVAILABLE_MODELS = ["Unet", "AttSqueezeUNet"]
+AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss"]
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int)
 parser.add_argument("--batch_size", default=16, type=int)
@@ -48,9 +49,28 @@ parser.add_argument(
     default=False,
     help="Use True to log the training process to wandb",
 )
+parser.add_argument(
+    "--model",
+    type=str,
+    default="Unet",
+    help=f"Model architecture to be used for training, one of {AVAILABLE_MODELS}",
+)
+parser.add_argument(
+    "--loss_function",
+    type=str,
+    default="DiceLoss",
+    help=f"Loss function to be used for training, one of {AVAILABLE_LOSSES}",
+)
 args = parser.parse_args()
 
+
 if __name__ == "__main__":
+    assert (
+        args.model in AVAILABLE_MODELS
+    ), f"Model must be one of {AVAILABLE_MODELS}"
+    assert (
+        args.loss_function in AVAILABLE_LOSSES
+    ), f"Loss function must be one of {AVAILABLE_LOSSES}"
     if args.train:
         if args.training_data_path is None:
             raise TypeError(

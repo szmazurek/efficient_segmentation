@@ -4,11 +4,11 @@ import lightning.pytorch as pl
 
 # from network import UNet, LightningUnet
 from models.lightning_module import LightningModel
-from E2MIP_Challenge_FetalBrainSegmentation.src.utils.dataloader_utils import (
+from utils.dataloader_utils import (
     FetalBrainDataset,
     preprocess,
 )
-from E2MIP_Challenge_FetalBrainSegmentation.src.utils.utils import DiceLoss
+from utils.utils import DiceLoss
 
 
 def train(args):
@@ -88,8 +88,8 @@ def train_lightning(args):
     # models ['Unet', 'AttSqueezeUNet']
     # losses ['DiceLoss', 'MCCLoss']
     model = LightningModel(
-        loss="MCCLoss",
-        model="Unet",
+        loss=args.model,
+        model=args.loss_function,
         in_shape=(None, 1, 224, 224),
         lr=args.lr,
     )

@@ -9,7 +9,7 @@
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
 #SBATCH --mem-per-cpu=5GB
 ## Maksymalny czas trwania zlecenia (format HH:MM:SS)
-#SBATCH --time=00:15:00
+#SBATCH --time=00:20:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
 #SBATCH -A plgsanoathena-gpu-a100
 ## Specyfikacja partycji
@@ -23,4 +23,4 @@ ml CUDA/11.7
 conda activate /net/tscratch/people/plgmazurekagh/energy_efficient_ai/energy_efficient_env
 # conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
-srun -u python main.py --train --training_data_path data/training_data --lr 0.001 --num_classes 1 --epochs 100 --batch_size 16
+srun -u python src/main.py --train --training_data_path data/training_data --lr 0.001 --num_classes 1 --epochs 100 --batch_size 16

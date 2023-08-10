@@ -5,7 +5,7 @@ import torchio as tio
 
 from torch.utils.data import Dataset
 
-from E2MIP_Challenge_FetalBrainSegmentation.src.utils.utils import (
+from .utils import (
     verify_segmentation_dataset,
 )
 

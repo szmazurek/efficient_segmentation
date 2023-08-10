@@ -22,4 +22,4 @@
 ml CUDA/11.7
 conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
-srun python main.py --test --testing_data_path data/training_data --model_path "lightning_logs/version_53/checkpoints/epoch=61-step=310.ckpt" --test_results_save_path data/test_results
+srun python src/main.py --test --testing_data_path data/training_data --model_path "lightning_logs/version_53/checkpoints/epoch=61-step=310.ckpt" --test_results_save_path data/test_results

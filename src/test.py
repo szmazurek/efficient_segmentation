@@ -6,10 +6,10 @@ import torchio as tio
 
 from models.torch_models import UNet
 from models.lightning_module import LightningModel
-from E2MIP_Challenge_FetalBrainSegmentation.src.utils.dataloader_utils import (
+from utils.dataloader_utils import (
     preprocess,
 )
-from E2MIP_Challenge_FetalBrainSegmentation.src.utils.utils import (
+from utils.utils import (
     verify_segmentation_dataset,
 )
 from torchmetrics import Dice
