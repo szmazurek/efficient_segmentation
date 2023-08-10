@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 
 import torch
@@ -7,8 +6,12 @@ import torchio as tio
 
 from models.torch_models import UNet
 from models.lightning_module import LightningModel
-from dataset_train import preprocess
-from utils import verify_segmentation_dataset
+from E2MIP_Challenge_FetalBrainSegmentation.src.utils.dataloader_utils import (
+    preprocess,
+)
+from E2MIP_Challenge_FetalBrainSegmentation.src.utils.utils import (
+    verify_segmentation_dataset,
+)
 from torchmetrics import Dice
 
 

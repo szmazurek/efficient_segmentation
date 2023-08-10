@@ -4,8 +4,11 @@ import lightning.pytorch as pl
 
 # from network import UNet, LightningUnet
 from models.lightning_module import LightningModel
-from dataset_train import FetalBrainDataset, preprocess
-from utils import DiceLoss
+from E2MIP_Challenge_FetalBrainSegmentation.src.utils.dataloader_utils import (
+    FetalBrainDataset,
+    preprocess,
+)
+from E2MIP_Challenge_FetalBrainSegmentation.src.utils.utils import DiceLoss
 
 
 def train(args):

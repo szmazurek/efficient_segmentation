@@ -1,3 +1,23 @@
+# Project rules and requirements
+Objective: create model that can segment fetal brain MRI scans with good Dice score
+while being energy efficient. Models will be evaluated based on Pareto frontier of
+dice score and energy consumption. <br>
+Hardware where it will be run:
+- 2x CPU Ceon Platinium 8358, 76 cores total
+- 4x NVIDIA A100 with 40 GB of RAM
+- 512 GB RAM
+- 960 GB SSD
+Jury will measure the complete energy consumption of the node. <br>
+They will run docker image with the project, I hope they will soon <br>
+publish it because idk the lib requirements of their OS. <br>
+
+
+Original readme below.
+
+
+
+
+
 # [E2MIP Challenge](https://e2mip.github.io/), MICCAI 2023
 ## Starting point for E2MIP challenge, task 3: Segmentation of an unknown dataset (fetal brain MRI)
 
@@ -68,3 +88,5 @@ Please see the "data" folder.
 
 For further questions about this code, please contact razieh.faghihpirayesh@childrens.harvard.edu
 with subject "E2MIP Challenge, task 3"
+
+

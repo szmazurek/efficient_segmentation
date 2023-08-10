@@ -5,11 +5,15 @@ import torchio as tio
 
 from torch.utils.data import Dataset
 
-from utils import verify_segmentation_dataset
+from E2MIP_Challenge_FetalBrainSegmentation.src.utils.utils import (
+    verify_segmentation_dataset,
+)
 
 
 class FetalBrainDataset(Dataset):
-    def __init__(self, images_folder, masks_folder, img_size=224, transform=None):
+    def __init__(
+        self, images_folder, masks_folder, img_size=224, transform=None
+    ):
         self.data = create_dataset_csv(images_folder, masks_folder)
         self.transform = transform
         self.img_size = img_size
@@ -36,7 +40,9 @@ class FetalBrainDataset(Dataset):
         subject = tio.Subject(img=img_array_, label=label_array_)
 
         if self.transform:
-            subject = self.transform(subject, img_size=self.img_size, intensity=True)
+            subject = self.transform(
+                subject, img_size=self.img_size, intensity=True
+            )
 
         # Get values from tio data
         img_data = subject["img"]["data"].squeeze()
@@ -92,7 +98,9 @@ def preprocess(input_tio, img_size=224, intensity=False):
             [
                 tio.Resample(target_spacing),
                 tio.CropOrPad((img_size, img_size, input_tio.shape[-1])),
-                tio.RescaleIntensity(out_min_max=(0, 1.0), percentiles=(0.5, 99.5)),
+                tio.RescaleIntensity(
+                    out_min_max=(0, 1.0), percentiles=(0.5, 99.5)
+                ),
             ]
         )
     else:
