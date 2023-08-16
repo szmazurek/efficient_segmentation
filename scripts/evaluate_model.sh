@@ -16,10 +16,16 @@
 #SBATCH --partition plgrid-gpu-a100
 #SBATCH --gpus-per-task=1
 ## Plik ze standardowym wyjściem
-#SBATCH --output="output_files/out_test.out"
+#SBATCH --output="output_files/stdout_test.out"
 ## Plik ze standardowym wyjściem błędó0w
-#SBATCH --error="output_files/eeg_test.err"
+#SBATCH --error="output_files/stderr_test.err"
 ml CUDA/11.7
 conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
-srun python src/main.py --test --testing_data_path data/training_data --model_path "lightning_logs/version_53/checkpoints/epoch=61-step=310.ckpt" --test_results_save_path data/test_results
+srun python src/main.py \
+    --test \
+    --testing_data_path data/training_data \
+    --model_path "lightning_logs/version_1/checkpoints/epoch=67-step=340.ckpt" \
+    --test_results_save_path data/test_results \
+    --model Unet \
+    --loss_function MCCLoss

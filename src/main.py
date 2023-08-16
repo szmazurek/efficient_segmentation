@@ -3,7 +3,7 @@ from test import test_lightning
 
 import argparse
 
-AVAILABLE_MODELS = ["Unet", "AttSqueezeUNet"]
+AVAILABLE_MODELS = ["Unet", "AttSqueezeUnet"]
 AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss"]
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int)

@@ -3,10 +3,11 @@ import numpy as np
 
 import torch
 import torchio as tio
-
+import lightning.pytorch as pl
 from models.torch_models import UNet
 from models.lightning_module import LightningModel
 from utils.dataloader_utils import (
+    FetalBrainDataset,
     preprocess,
 )
 from utils.utils import (
@@ -118,10 +119,40 @@ def test_lightning(args):
     model = LightningModel.load_from_checkpoint(
         args.model_path,
         in_shape=(None, 1, 224, 224),
-        loss="MCCLoss",
-        model="Unet",
+        loss=args.loss_function,
+        model=args.model,
+    )
+    visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
+    strategy = (
+        pl.strategies.SingleDeviceStrategy(device=args.device)
+        if visible_devices == 1
+        else pl.strategies.DDPStrategy(find_unused_parameters=False)
+    )
+    images_folder = os.path.join(args.testing_data_path, "images")
+    masks_folder = os.path.join(args.testing_data_path, "masks")
+    main_dataset = FetalBrainDataset(
+        images_folder, masks_folder, img_size=224, transform=preprocess
+    )
+    trainer = pl.Trainer(
+        devices="auto",
+        precision="16-mixed",
+        strategy=strategy,
+        enable_model_summary=False,
+        max_epochs=args.epochs,
+        log_every_n_steps=1,
+        sync_batchnorm=True,
+    )
+    loader = torch.utils.data.DataLoader(
+        main_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
     )
     dice_metric = Dice(reduction="micro", multiclass=False)
+    trainer.test(model=model, dataloaders=loader)
     with torch.no_grad():
         dice_score = 0.0
         for idx in range(len(images_paths)):

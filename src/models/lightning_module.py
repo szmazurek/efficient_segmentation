@@ -16,18 +16,11 @@ class LightningModel(pl.LightningModule):
         lr=1e-3,
         in_shape=(None, 1, 256, 256),
     ):
-        assert model in [
-            "Unet",
-            "AttSqueezeUNet",
-        ], "model must be Unet or AttSqueezeUNet"
-        assert loss in [
-            "DiceLoss",
-            "MCCLoss",
-        ], "loss must be DiceLoss or MCCLoss"
         super().__init__()
+
         if model == "Unet":
             self.model = UNet(in_channels, in_channels, init_features)
-        elif model == "AttSqueezeUNet":
+        elif model == "AttSqueezeUnet":
             self.model = AttSqueezeUNet(1, in_shape)
         if loss == "DiceLoss":
             self.loss = smp.losses.DiceLoss(mode="binary", from_logits=False)

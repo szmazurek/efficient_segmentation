@@ -85,11 +85,9 @@ def train_lightning(args):
         prefetch_factor=2,
         drop_last=False,
     )
-    # models ['Unet', 'AttSqueezeUNet']
-    # losses ['DiceLoss', 'MCCLoss']
     model = LightningModel(
-        loss=args.model,
-        model=args.loss_function,
+        loss=args.loss_function,
+        model=args.model,
         in_shape=(None, 1, 224, 224),
         lr=args.lr,
     )
