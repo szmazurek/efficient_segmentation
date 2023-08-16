@@ -1,6 +1,5 @@
 from train import train_lightning
 from test import test_lightning
-
 import argparse
 
 AVAILABLE_MODELS = ["Unet", "AttSqueezeUnet"]
