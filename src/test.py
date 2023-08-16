@@ -2,179 +2,235 @@ import os
 import numpy as np
 
 import torch
-import torchio as tio
 import lightning.pytorch as pl
-from models.torch_models import UNet
 from models.lightning_module import LightningModel
-from utils.dataloader_utils import (
-    FetalBrainDataset,
-    preprocess,
+from glob import glob
+
+from monai import config
+from monai.data import decollate_batch, Dataset, DataLoader
+from monai.inferers import SliceInferer
+from monai.networks.nets import UNet
+from monai.transforms import (
+    Activationsd,
+    LoadImaged,
+    AsDiscreted,
+    ResizeWithPadOrCropd,
+    RemoveSmallObjectsd,
+    EnsureChannelFirstd,
+    Invertd,
+    Compose,
+    Spacingd,
+    MapTransform,
+    SaveImaged,
 )
-from utils.utils import (
-    verify_segmentation_dataset,
-)
-from torchmetrics import Dice
+
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
-def test_one_volume(model, input_volume_path, device):
-    image = tio.ScalarImage(input_volume_path)
-    prediction = np.zeros(image.shape[1:])
+class SliceWiseNormalizeIntensityd(MapTransform):
+    def __init__(self, keys, subtrahend=0.0, divisor=None, nonzero=True):
+        super().__init__(keys)
+        self.subtrahend = subtrahend
+        self.divisor = divisor
+        self.nonzero = nonzero
 
-    for test_data_idx in range(image.shape[-1]):
-        img_array = tio.ScalarImage(
-            tensor=image.data[:, :, :, None, test_data_idx].float(),
-            affine=image.affine,
-        )
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.keys:
+            image = d[key]
+            for i in range(image.shape[-1]):
+                slice_ = image[..., i]
+                if self.nonzero:
+                    mask = slice_ > 0
+                    if np.any(mask):
+                        if self.subtrahend is None:
+                            slice_[mask] = slice_[mask] - slice_[mask].mean()
+                        else:
+                            slice_[mask] = slice_[mask] - self.subtrahend
 
-        img_array = preprocess(img_array, img_size=224, intensity=True)
-        inputs = img_array["data"][:, None, :, :, 0].to(device)
+                        if self.divisor is None:
+                            slice_[mask] /= slice_[mask].std()
+                        else:
+                            slice_[mask] /= self.divisor
 
-        outputs = model(inputs)
-        outputs = torch.argmax(torch.softmax(outputs, dim=1), dim=1)
+                else:
+                    if self.subtrahend is None:
+                        slice_ = slice_ - slice_.mean()
+                    else:
+                        slice_ = slice_ - self.subtrahend
 
-        label_array = tio.LabelMap(
-            tensor=outputs[:, :, :, None].cpu().long(), affine=img_array.affine
-        )
-        label_array = preprocess(
-            label_array, img_size=image.shape[1], intensity=False
-        )
+                    if self.divisor is None:
+                        slice_ /= slice_.std()
+                    else:
+                        slice_ /= self.divisor
 
-        out = label_array["data"].squeeze().cpu().detach().numpy()
-        prediction[:, :, test_data_idx] = out
-
-    return prediction
+                image[..., i] = slice_
+            d[key] = image
+        return d
 
 
 def test(args):
-    # Set up dataset
-    images_folder = os.path.join(args.testing_data_path, "images")
-    masks_folder = os.path.join(args.testing_data_path, "masks")
-    images_paths = sorted(
-        [os.path.join(images_folder, f) for f in os.listdir(images_folder)]
-    )
-    masks_paths = sorted(
-        [os.path.join(masks_folder, f) for f in os.listdir(masks_folder)]
-    )
-    verify_segmentation_dataset(images_paths, masks_paths)
+    config.print_config()
 
-    assert len(images_paths) == len(
-        masks_paths
-    ), "number of images and number of masks do not match".format(
-        len(images_paths), len(masks_paths)
+    test_transforms = Compose(
+        [
+            LoadImaged(keys=["image"]),
+            EnsureChannelFirstd(keys=["image"]),
+            Spacingd(keys="image", pixdim=(1.0, 1.0, -1.0), mode="bilinear"),
+            SliceWiseNormalizeIntensityd(keys=["image"], nonzero=True),
+            ResizeWithPadOrCropd(
+                keys="image", spatial_size=(args.img_size, args.img_size, -1)
+            ),
+        ]
     )
 
-    # Load the model
-    device = torch.device(args.device)
-    model = UNet().to(device)
-    msg = model.load_state_dict(torch.load(args.model_path))
-    print("model loaded", msg)
+    # load data
+    test_images = sorted(
+        glob(os.path.join(args.testing_data_path, "*.nii.gz"))
+    )
+    test_files = [{"image": image_name} for image_name in test_images]
 
-    # Set model to eval mode
-    model.eval()
+    test_dataset = Dataset(data=test_files, transform=test_transforms)
+    test_dataloader = DataLoader(test_dataset, batch_size=1, num_workers=0)
 
-    # Iterate over test data
+    post_transforms = Compose(
+        [
+            Invertd(
+                keys="pred",
+                transform=test_transforms,
+                orig_keys="image",
+                meta_keys="pred_meta_dict",
+                orig_meta_keys="image_meta_dict",
+                meta_key_postfix="meta_dict",
+                nearest_interp=False,
+                to_tensor=True,
+            ),
+            Activationsd(keys="pred", softmax=True),
+            AsDiscreted(keys="pred", argmax=True, to_onehot=None),
+            RemoveSmallObjectsd(keys="pred", min_size=50, connectivity=1),
+            SaveImaged(
+                keys="pred",
+                meta_keys="pred_meta_dict",
+                output_dir=args.test_save_path,
+                separate_folder=False,
+                output_postfix="maskpred",
+                resample=False,
+            ),
+        ]
+    )
+
+    device = args.device
+    model = UNet(
+        spatial_dims=2,
+        in_channels=1,
+        out_channels=2,
+        channels=(32, 64, 128, 256, 512),
+        strides=(2, 2, 2, 2),
+    ).to(device)
+    model.load_state_dict(torch.load(args.model_path))
+
+    inferer = SliceInferer(roi_size=(256, 256), spatial_dim=2, progress=False)
+
     with torch.no_grad():
-        for idx in range(len(images_paths)):
-            predicted_mask = test_one_volume(
-                model=model,
-                input_volume_path=images_paths[idx],
-                device=args.device,
-            )
-            actual_mask = tio.LabelMap(masks_paths[idx])
-            if args.test_results_save_path:
-                os.makedirs(args.test_results_save_path, exist_ok=True)
-                save_name = os.path.basename(masks_paths[idx])
+        model.eval()
+        for i, test_data in enumerate(test_dataloader):
+            test_inputs = test_data["image"].to(device)
 
-                result_mask = tio.LabelMap(
-                    tensor=predicted_mask[None], affine=actual_mask.affine
-                )
-
-                # write the image
-                result_mask.save(
-                    os.path.join(args.test_results_save_path, save_name)
-                )
-
-    print("Testing complete!")
+            test_data["pred"] = inferer(test_inputs, model)
+            test_data = [
+                post_transforms(i) for i in decollate_batch(test_data)
+            ]
 
 
 def test_lightning(args):
-    images_folder = os.path.join(args.testing_data_path, "images")
-    masks_folder = os.path.join(args.testing_data_path, "masks")
-    images_paths = sorted(
-        [os.path.join(images_folder, f) for f in os.listdir(images_folder)]
-    )
-    masks_paths = sorted(
-        [os.path.join(masks_folder, f) for f in os.listdir(masks_folder)]
-    )
-    verify_segmentation_dataset(images_paths, masks_paths)
+    config.print_config()
 
-    assert len(images_paths) == len(
-        masks_paths
-    ), "number of images and number of masks do not match".format(
-        len(images_paths), len(masks_paths)
+    test_transforms = Compose(
+        [
+            LoadImaged(keys=["image"]),
+            EnsureChannelFirstd(keys=["image"]),
+            Spacingd(keys="image", pixdim=(1.0, 1.0, -1.0), mode="bilinear"),
+            SliceWiseNormalizeIntensityd(keys=["image"], nonzero=True),
+            ResizeWithPadOrCropd(
+                keys="image", spatial_size=(args.img_size, args.img_size, -1)
+            ),
+        ]
     )
 
-    # Load the model
+    # load data
+    test_images = sorted(
+        glob(os.path.join(args.testing_data_path, "*.nii.gz"))
+    )
+    test_files = [{"image": image_name} for image_name in test_images]
+
+    test_dataset = Dataset(data=test_files, transform=test_transforms)
+    test_dataloader_lightning = DataLoader(
+        test_dataset, batch_size=1, num_workers=0
+    )
+    test_dataloader_torch = DataLoader(
+        test_dataset, batch_size=1, num_workers=0
+    )
+
+    post_transforms = Compose(
+        [
+            Invertd(
+                keys="pred",
+                transform=test_transforms,
+                orig_keys="image",
+                meta_keys="pred_meta_dict",
+                orig_meta_keys="image_meta_dict",
+                meta_key_postfix="meta_dict",
+                nearest_interp=False,
+                to_tensor=True,
+            ),
+            Activationsd(keys="pred", softmax=True),
+            AsDiscreted(keys="pred", argmax=True, to_onehot=None),
+            RemoveSmallObjectsd(keys="pred", min_size=50, connectivity=1),
+            SaveImaged(
+                keys="pred",
+                meta_keys="pred_meta_dict",
+                output_dir=args.test_results_save_path,
+                separate_folder=False,
+                output_postfix="maskpred",
+                resample=False,
+            ),
+        ]
+    )
     device = torch.device(args.device)
     model = LightningModel.load_from_checkpoint(
         args.model_path,
-        in_shape=(None, 1, 224, 224),
+        in_shape=(None, 1, args.img_size, args.img_size),
         loss=args.loss_function,
         model=args.model,
     )
-    visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
-    strategy = (
-        pl.strategies.SingleDeviceStrategy(device=args.device)
-        if visible_devices == 1
-        else pl.strategies.DDPStrategy(find_unused_parameters=False)
+    # visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
+    # strategy = (
+    #     pl.strategies.SingleDeviceStrategy(device=args.device)
+    #     if visible_devices == 1
+    #     else pl.strategies.DDPStrategy(find_unused_parameters=False)
+    # )
+    # trainer = pl.Trainer(
+    #     devices="auto",
+    #     precision="16-mixed",
+    #     strategy=strategy,
+    #     enable_model_summary=False,
+    #     max_epochs=args.epochs,
+    #     log_every_n_steps=1,
+    #     sync_batchnorm=True,
+    # )
+    # trainer.test(model=model, dataloaders=test_dataloader_lightning)
+    inferer = SliceInferer(
+        roi_size=(args.img_size, args.img_size), spatial_dim=2, progress=False
     )
-    images_folder = os.path.join(args.testing_data_path, "images")
-    masks_folder = os.path.join(args.testing_data_path, "masks")
-    main_dataset = FetalBrainDataset(
-        images_folder, masks_folder, img_size=224, transform=preprocess
-    )
-    trainer = pl.Trainer(
-        devices="auto",
-        precision="16-mixed",
-        strategy=strategy,
-        enable_model_summary=False,
-        max_epochs=args.epochs,
-        log_every_n_steps=1,
-        sync_batchnorm=True,
-    )
-    loader = torch.utils.data.DataLoader(
-        main_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        prefetch_factor=2,
-        drop_last=False,
-    )
-    dice_metric = Dice(reduction="micro", multiclass=False)
-    trainer.test(model=model, dataloaders=loader)
+
     with torch.no_grad():
-        dice_score = 0.0
-        for idx in range(len(images_paths)):
-            predicted_mask = test_one_volume(
-                model=model, input_volume_path=images_paths[idx], device=device
-            )
-            actual_mask = tio.LabelMap(masks_paths[idx])
-            perm_mask_pred = torch.from_numpy(predicted_mask).int()
+        model.eval()
+        for i, test_data in enumerate(test_dataloader_torch):
+            test_inputs = test_data["image"].to(device)
 
-            actual_mask_perm = actual_mask.data.squeeze().int()
-
-            dice_score += dice_metric(perm_mask_pred, actual_mask_perm).item()
-            if args.test_results_save_path:
-                os.makedirs(args.test_results_save_path, exist_ok=True)
-                save_name = os.path.basename(masks_paths[idx])
-
-                result_mask = tio.LabelMap(
-                    tensor=predicted_mask[None], affine=actual_mask.affine
-                )
-
-                # write the image
-                result_mask.save(
-                    os.path.join(args.test_results_save_path, save_name)
-                )
-        print("Dice score: ", dice_score / len(images_paths))
+            test_data["pred"] = inferer(test_inputs, model)
+            test_data = [
+                post_transforms(i) for i in decollate_batch(test_data)
+            ]

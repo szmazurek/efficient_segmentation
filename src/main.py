@@ -29,6 +29,13 @@ parser.add_argument(
     "--test", action="store_true", default=False, help="Use True for testing"
 )
 parser.add_argument(
+    "--img_size",
+    type=int,
+    default=256,
+    help="input patch size of network input",
+)
+
+parser.add_argument(
     "--test_results_save_path",
     type=str,
     help="Set the path to save the test results",
