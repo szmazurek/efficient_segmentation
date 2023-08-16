@@ -20,12 +20,13 @@
 ## Plik ze standardowym wyjściem błędó0w
 #SBATCH --error="output_files/stderr_test.err"
 ml CUDA/11.7
-conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
+# conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
+conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
-srun python3.10 src/main.py \
+srun python src/main.py \
     --test \
     --testing_data_path data/testing_data \
-    --model_path "lightning_logs/version_6/checkpoints/epoch=80-step=243.ckpt" \
+    --model_path "lightning_logs/version_17/checkpoints/epoch=95-step=384.ckpt" \
     --test_results_save_path data/test_results \
     --model Unet \
     --loss_function MCCLoss

@@ -18,6 +18,8 @@ from utils.utils import DiceLoss
 
 warnings.filterwarnings("ignore")
 
+pl.seed_everything(42)
+
 
 def train(args):
     monai.config.print_config()
@@ -203,8 +205,8 @@ def train_lightning(args):
     )
     main_dataset = Dataset(data=files, transform=transformations)
 
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        main_dataset, [0.9, 0.1]
+    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
+        main_dataset, [0.8, 0.1, 0.1]
     )
     train_dataloader = DataLoader(
         train_dataset,
@@ -217,6 +219,15 @@ def train_lightning(args):
     )
     val_loader = DataLoader(
         val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
+    )
+    test_loader = DataLoader(
+        test_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=4,
@@ -267,4 +278,5 @@ def train_lightning(args):
     )
 
     trainer.fit(model, train_dataloader, val_loader)
+    trainer.test(model, dataloaders=test_loader, ckpt_path="best")
     print("Finished training.")

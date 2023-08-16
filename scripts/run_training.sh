@@ -9,12 +9,12 @@
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
 #SBATCH --mem-per-cpu=5GB
 ## Maksymalny czas trwania zlecenia (format HH:MM:SS)
-#SBATCH --time=00:05:00
+#SBATCH --time=00:20:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
 #SBATCH -A plgsanoathena-gpu-a100
 ## Specyfikacja partycji
 #SBATCH --partition plgrid-gpu-a100
-#SBATCH --gpus-per-task=1
+#SBATCH --gpus-per-task=4
 ## Plik ze standardowym wyjściem
 #SBATCH --output="output_files/stdout.out"
 ## Plik ze standardowym wyjściem błędó0w
@@ -31,7 +31,7 @@ srun -u python  src/main.py \
     --training_data_path data/training_data \
     --lr 0.001 \
     --num_classes 1 \
-    --epochs 10 \
+    --epochs 100 \
     --batch_size 32 \
     --model Unet \
     --loss_function MCCLoss

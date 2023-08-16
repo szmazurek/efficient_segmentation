@@ -116,7 +116,7 @@ class LightningModel(pl.LightningModule):
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
-        x, _ = batch
+        x = batch["image"]
         y_hat = self(x)
         return y_hat
 
