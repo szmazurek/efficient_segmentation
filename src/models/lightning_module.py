@@ -1,6 +1,7 @@
 import lightning.pytorch as pl
 import torch
 from torchmetrics import Dice
+from monai.metrics import DiceMetric
 import segmentation_models_pytorch as smp
 from .torch_models import UNet, AttSqueezeUNet
 
@@ -33,8 +34,8 @@ class LightningModel(pl.LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        y = y
+        x, y = batch["image"], batch["label"]
+        y = y.int()
         y_hat = self(x)
 
         loss = self.loss(y_hat, y)
@@ -61,8 +62,8 @@ class LightningModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y = y
+        x, y = batch["image"], batch["label"]
+        y = y.int()
         y_hat = self(x)
 
         loss = self.loss(y_hat, y)
@@ -89,8 +90,8 @@ class LightningModel(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
-        y = y
+        x, y = batch["image"], batch["label"]
+        y = y.int()
         y_hat = self(x)
         loss = self.loss(y_hat, y)
         dice_score = self.dice_score(y_hat, y)

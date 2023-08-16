@@ -20,17 +20,13 @@
 ## Plik ze standardowym wyjściem błędó0w
 #SBATCH --error="output_files/stderr.err"
 
-ml GCCcore/12.2.0
-ml Python/3.10.8
-ml CUDA/11.7.0
-source /net/tscratch/people/plgmazurekagh/energy_efficient_ai/venv_energy_efficient/bin/activate
-# ml monai/1.0.1
 
-# ml CUDA/11.7
+
+ml CUDA/11.7
 # conda activate /net/tscratch/people/plgmazurekagh/energy_efficient_ai/energy_efficient_env
-# conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
+conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
-srun -u python3.10  src/main.py \
+srun -u python  src/main.py \
     --train \
     --training_data_path data/training_data \
     --lr 0.001 \
