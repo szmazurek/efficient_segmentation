@@ -8,12 +8,12 @@ import monai
 import monai.transforms as tr
 import torch
 
+from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
 from monai.data import DataLoader, Dataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
-from utils.dataloader_utils import FetalBrainDataset, preprocess
-from utils.utils import DiceLoss
+
 
 # warnings.filterwarnings("ignore")
 
@@ -261,18 +261,20 @@ def train_lightning(args):
     # else
     print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
+    strategy = BaguaStrategy(
+        algorithm="qadam",
+    )
     trainer = pl.Trainer(
         devices="auto",
         accelerator="gpu",
         precision="16-mixed",
-        strategy="ddp",
+        strategy=strategy,
         num_nodes=1,
         enable_model_summary=False,
         max_epochs=args.epochs,
         logger=wandb_logger if args.wandb else None,
         callbacks=[model_checkpoint_callback, early_stopping_callback],
         log_every_n_steps=1,
-        # sync_batchnorm=True,
     )
 
     trainer.fit(model, train_dataloader, val_loader)

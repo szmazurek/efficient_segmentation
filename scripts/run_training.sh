@@ -31,14 +31,16 @@ conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
 cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
 export WANDB_API_KEY=$(cat "wandb_api_key.txt")
 export OMPI_MCA_opal_cuda_support=true
+
+
 srun -u python  src/main.py \
     --train \
     --training_data_path data/training_data \
     --lr 0.001 \
     --num_classes 1 \
     --epochs 100 \
-    --batch_size 128 \
+    --batch_size 32 \
     --model Unet \
     --loss_function MCCLoss \
     --exp_name "Adam" \
-    --wandb
+

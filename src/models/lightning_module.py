@@ -124,8 +124,10 @@ class LightningModel(pl.LightningModule):
     # def save_prediction_batch(self,result_mask):
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        # optimizer = bagua.algorithms.q_adam.QAdamOptimizer(
-        #     self.parameters(), lr=self.lr, warmup_steps=1000
-        # )
+        # optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = bagua.algorithms.q_adam.QAdamOptimizer(
+            self.parameters(), lr=self.lr, warmup_steps=1000, weight_decay=0.01
+        )
+        # optimizer = bagua.contrib.fuse_optimizer(optimizer, do_flatten=True)
+
         return optimizer
