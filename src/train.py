@@ -8,15 +8,14 @@ import monai
 import monai.transforms as tr
 import torch
 
-# from network import UNet, LightningUnet
+from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
 from monai.data import DataLoader, Dataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
-from utils.dataloader_utils import FetalBrainDataset, preprocess
-from utils.utils import DiceLoss
 
-warnings.filterwarnings("ignore")
+
+# warnings.filterwarnings("ignore")
 
 pl.seed_everything(42)
 
@@ -208,6 +207,7 @@ def train_lightning(args):
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
         main_dataset, [0.8, 0.1, 0.1]
     )
+
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -248,33 +248,33 @@ def train_lightning(args):
         monitor="val_loss", patience=15, mode="min", verbose=True
     )
     if args.wandb:
-        api_key = open("wandb_api_key.txt", "r")
-        key = api_key.read()
-        api_key.close()
-        os.environ["WANDB_API_KEY"] = key
         wandb_logger = pl.loggers.WandbLogger(
             project="E2MIP_Challenge_FetalBrainSegmentation",
             entity="mazurek",
             log_model=False,
+            name=args.exp_name,
         )
     visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
-    strategy = (
-        pl.strategies.SingleDeviceStrategy(device=args.device)
-        if visible_devices == 1
-        else pl.strategies.DDPStrategy(find_unused_parameters=False)
-    )
+    # strategy = pl.strategies.DDPStrategy(find_unused_parameters=False)
+    # pl.strategies.SingleDeviceStrategy(device=args.device)
+    # if visible_devices == 1
+    # else
     print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
+    strategy = BaguaStrategy(
+        algorithm="qadam",
+    )
     trainer = pl.Trainer(
         devices="auto",
+        accelerator="gpu",
         precision="16-mixed",
         strategy=strategy,
+        num_nodes=1,
         enable_model_summary=False,
         max_epochs=args.epochs,
         logger=wandb_logger if args.wandb else None,
         callbacks=[model_checkpoint_callback, early_stopping_callback],
         log_every_n_steps=1,
-        sync_batchnorm=True,
     )
 
     trainer.fit(model, train_dataloader, val_loader)

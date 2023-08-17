@@ -67,6 +67,12 @@ parser.add_argument(
     default="DiceLoss",
     help=f"Loss function to be used for training, one of {AVAILABLE_LOSSES}",
 )
+parser.add_argument(
+    "--exp_name",
+    type=str,
+    default="my_run",
+    help="Experiment name for logging to wandb",
+)
 args = parser.parse_args()
 
 
