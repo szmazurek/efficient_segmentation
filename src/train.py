@@ -202,12 +202,19 @@ def train_lightning(args):
             ),
         ]
     )
+
+    # cache works and works good for single process training. It seems that
+    # when using runtime process caching, everything is fine. Changing cache rate does
+    # not seem to affect the GPU memory allocation when in this mode.
+    # When all the data is preloaded into cache before starting training,
+    # the GPU memory exploded, but dunno why - now it works *LOL*.
+
     main_dataset = CacheDataset(
         data=files,
         transform=transformations,
         num_workers=4,
         # cache_rate=0.5,
-        runtime_cache="processes",
+        # runtime_cache="processes",
     )
     # main_dataset = Dataset(
     #     data=files,
