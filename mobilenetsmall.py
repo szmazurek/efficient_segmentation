@@ -1,8 +1,6 @@
-#based on: https://github.com/Isnot2bad/Micro-Net
+#based on: https://github.com/Tramac/mobilenetv3-segmentation/blob/ca7ec6633e7f75893cf243878b53c4c51366e6ad/core/model/base_model/mobilenetv3.py#L118
 
 """Searching for MobileNetV3"""
-import torch.nn as nn
-
 __all__ = ['MobileNetV3', 'get_mobilenet_v3', 'mobilenet_v3_small_1_0']
 
 import torch
@@ -108,20 +106,16 @@ class Bottleneck(nn.Module):
             return self.conv(x)
 
 
-if __name__ == '__main__':
-    img = torch.randn(1, 16, 64, 64)
-    model = Bottleneck(16, 16, 16, 3, 1)
-    out = model(img)
-    print(out.size())
-
-
-
-
+# if __name__ == '__main__':
+#     img = torch.randn(1, 16, 64, 64)
+#     model = Bottleneck(16, 16, 16, 3, 1)
+#     out = model(img)
+#     print(out.size())
 
 
 
 class MobileNetV3(nn.Module):
-    def __init__(self, nclass=2, mode='small', width_mult=1.0, dilated=False, norm_layer=nn.BatchNorm2d):
+    def __init__(self, nclass=2, mode='small', width_mult=1.0, dilated=True, pretrained_base=False, norm_layer=nn.BatchNorm2d):
         super(MobileNetV3, self).__init__()
         if mode == 'large':
             layer1_setting = [
@@ -241,28 +235,27 @@ class MobileNetV3(nn.Module):
                     nn.init.zeros_(m.bias)
 
 
-def get_mobilenet_v3(mode='small', width_mult=1.0, pretrained=False, root='~/,torch/models', **kwargs):
-    model = MobileNetV3(mode=mode, width_mult=width_mult, **kwargs)
+#def get_mobilenet_v3(mode='small', width_mult=1.0, pretrained=False, root='~/,torch/models', **kwargs):
+def get_mobilenet_v3(width_mult=1.0, dilated=True, pretrained=False, **kwargs):
+    model = MobileNetV3(mode='small', width_mult=width_mult, pretrained_base=False, **kwargs)
     if pretrained:
         raise ValueError("Not support pretrained")
     return model
 
 
-def mobilenet_v3_small_1_0(**kwargs):
-    return get_mobilenet_v3('small', 1.0, **kwargs)
+# def mobilenet_v3_small_1_0(**kwargs):
+#     return get_mobilenet_v3(width_mult=1.0, **kwargs)a
+
+def mobilenet_v3_small_1_0(width_mult=1.0, **kwargs):
+    return get_mobilenet_v3(width_mult=width_mult, **kwargs)
 
 
-if __name__ == '__main__':
-    model = mobilenet_v3_small_1_0()
+# if __name__ == '__main__':
+#     model = mobilenet_v3_small_1_0()
 
 
 
-"""Base Model for Semantic Segmentation"""
-import torch.nn as nn
-
-__all__ = ['SegBaseModel']
-
-
+# Base Model for Semantic Segmentation
 class SegBaseModel(nn.Module):
     def __init__(self, nclass, aux=False, backbone='mobilenetv3_small', pretrained_base=True, **kwargs):
         super(SegBaseModel, self).__init__()
@@ -287,24 +280,7 @@ class SegBaseModel(nn.Module):
 
         return c1, c2, c3, c4
 
-
-if __name__ == '__main__':
-    model = SegBaseModel(20, pretrained_base=False)
-
-
-#start with transfering network architecture code for segmentation without referring to data load
-
-#--------------------------------------
-
-"""MobileNet3 for Semantic Segmentation"""
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-
-__all__ = ['MobileNetV3Seg', 'get_mobilenetv3_large_seg', 'get_mobilenetv3_small_seg']
-
-
+# MobileNetV3 for Semantic Segmentation
 class MobileNetV3Seg(SegBaseModel):
     def __init__(self, nclass, aux=False, backbone='mobilenetv3_small', pretrained_base=False, **kwargs):
         super(MobileNetV3Seg, self).__init__(nclass, aux, backbone, pretrained_base, **kwargs)
@@ -327,11 +303,10 @@ class MobileNetV3Seg(SegBaseModel):
             outputs.append(auxout)
         return tuple(outputs)
 
-
 class _SegHead(nn.Module):
     def __init__(self, nclass, mode='small', norm_layer=nn.BatchNorm2d, **kwargs):
         super(_SegHead, self).__init__()
-        in_channels = 960 if mode == 'small' else 576
+        in_channels = 960 if mode == 'large' else 576
         self.lr_aspp = _LRASPP(in_channels, norm_layer, **kwargs)
         self.project = nn.Conv2d(128, nclass, 1)
 
@@ -339,11 +314,9 @@ class _SegHead(nn.Module):
         x = self.lr_aspp(x)
         return self.project(x)
 
+import torch.nn.functional as F
 
-# TODO: check Lite R-ASPP
 class _LRASPP(nn.Module):
-    """Lite R-ASPP"""
-
     def __init__(self, in_channels, norm_layer, **kwargs):
         super(_LRASPP, self).__init__()
         out_channels = 128
@@ -353,7 +326,7 @@ class _LRASPP(nn.Module):
             nn.ReLU(True)
         )
         self.b1 = nn.Sequential(
-            nn.AvgPool2d(kernel_size=(49, 49), stride=(16, 20)),  # check it
+            nn.AdaptiveAvgPool2d(1),  # Use adaptive average pooling
             nn.Conv2d(in_channels, out_channels, 1, bias=False),
             nn.Sigmoid(),
         )
@@ -363,8 +336,12 @@ class _LRASPP(nn.Module):
         feat1 = self.b0(x)
         feat2 = self.b1(x)
         feat2 = F.interpolate(feat2, size, mode='bilinear', align_corners=True)
-        x = feat1 * feat2  # check it
+        x = feat1 * feat2
         return x
 
+
+
 if __name__ == '__main__':
-    model = MobileNetV3Seg(19)
+    # Initialize the MobileNetV3Seg model
+    model = MobileNetV3Seg(nclass=19, aux=True, backbone='mobilenetv3_small', pretrained_base=False)
+    print(model)

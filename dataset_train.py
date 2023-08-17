@@ -8,6 +8,10 @@ from torch.utils.data import Dataset
 from utils import verify_segmentation_dataset
 
 
+import torch
+from torch.utils.data import Dataset
+import torchio as tio
+
 class FetalBrainDataset(Dataset):
     def __init__(self, images_folder, masks_folder, img_size=224, transform=None):
         self.data = create_dataset_csv(images_folder, masks_folder)
@@ -38,6 +42,10 @@ class FetalBrainDataset(Dataset):
 
         img = img_data[None].float()
         label = label_data.long()
+
+        # Convert grayscale image to RGB if needed
+        if img.shape[0] == 1:  # If image has only 1 channel (grayscale)
+            img = torch.cat((img, img, img), dim=0)  # Convert to RGB
 
         return img, label
 

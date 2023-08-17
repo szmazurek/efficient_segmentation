@@ -23,28 +23,55 @@ def train(args):
 
     # Set up model, optimizer, and criterion
     #model = MobileNetV3Seg().to(device)
-    model = MobileNetV3Seg(nclass=args.num_classes, mode='small', width_mult=1.0).to(device)
+    model = MobileNetV3Seg(nclass=args.num_classes, width_mult=1.0).to(device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     criterion = DiceLoss(n_classes=args.num_classes)
 
     # Train for multiple epochs
     print("Initializing training...")
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
     for epoch in range(args.epochs):
+        running_loss = 0.0  # Initialize running_loss here
         model.train()
-        running_loss = 0.0
         for i, (inputs, targets) in enumerate(train_dataloader):
             inputs = inputs.to(device)
             targets = targets.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
-            loss = criterion(outputs, targets, softmax=True)
+            
+            # Apply softmax to each tensor in the tuple
+            outputs_softmax = tuple(torch.softmax(output, dim=1) for output in outputs)
+            
+            # Calculate the loss for each output tensor
+            losses = [criterion(output, targets) for output in outputs_softmax]
+            loss = sum(losses)
+            
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
             print(f"Completed batch {i+1} of epoch {epoch+1}")
-        # Print training and test metrics
-        print(f"Epoch {epoch}: train_loss = {running_loss / i+1:.4f}")
+        
+        print(f"Epoch {epoch+1} - Loss: {running_loss / len(train_dataloader)}")
+
+
+
 
         # Save model checkpoint
         torch.save(model.state_dict(), f"model_checkpoint_epoch_{epoch}.pt")
+
+class Args:
+    def __init__(self):
+        self.num_classes = 2
+        self.device = "cuda"  # or "cpu"
+        self.epochs = 10
+        self.batch_size = 4
+        self.lr = 0.001
+        self.training_data_path = "/net/tscratch/people/plgmnkpltrz/energyeff/efficient_segmentation/data/training_data"
+
+args = Args()
+args.mode = 'small'  # Set the mode
+
+train(args)
