@@ -4,6 +4,8 @@ from network import UNet
 from dataset_train import FetalBrainDataset, preprocess
 from utils import DiceLoss
 
+from mobilenetsmall import MobileNetV3Seg
+
 def train(args):
     # Set up dataset and data loaders
     images_folder = os.path.join(args.training_data_path, "images")
@@ -12,7 +14,7 @@ def train(args):
     train_dataloader = torch.utils.data.DataLoader(train_dataset,
                                                    batch_size=args.batch_size,
                                                    shuffle=True,
-                                                   num_workers=8,
+                                                   num_workers=2,
                                                    pin_memory=True,
                                                    drop_last=True)
 
@@ -20,7 +22,9 @@ def train(args):
     device = torch.device(args.device)
 
     # Set up model, optimizer, and criterion
-    model = UNet().to(device)
+    #model = MobileNetV3Seg().to(device)
+    model = MobileNetV3Seg(nclass=args.num_classes, mode='small', width_mult=1.0).to(device)
+
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     criterion = DiceLoss(n_classes=args.num_classes)
 

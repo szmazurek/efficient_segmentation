@@ -1,3 +1,8 @@
+#!/net/ascratch/people/plgmnkpltrz/energyeff/venv
+
+import sys
+print(sys.executable)
+
 from train import train
 from test import test
 
