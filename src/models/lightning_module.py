@@ -4,6 +4,7 @@ from torchmetrics import Dice
 from monai.metrics import DiceMetric
 import segmentation_models_pytorch as smp
 from .torch_models import UNet, AttSqueezeUNet
+import bagua.torch_api as bagua
 
 
 class LightningModel(pl.LightningModule):
@@ -124,4 +125,7 @@ class LightningModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        # optimizer = bagua.algorithms.q_adam.QAdamOptimizer(
+        #     self.parameters(), lr=self.lr, warmup_steps=1000
+        # )
         return optimizer
