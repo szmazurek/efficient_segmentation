@@ -10,10 +10,10 @@ import torch
 
 from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
-from monai.data import DataLoader, Dataset, decollate_batch
+from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
-
+import time
 
 # warnings.filterwarnings("ignore")
 
@@ -202,7 +202,24 @@ def train_lightning(args):
             ),
         ]
     )
-    main_dataset = Dataset(data=files, transform=transformations)
+
+    # cache works and works good for single process training. It seems that
+    # when using runtime process caching, everything is fine. Changing cache rate does
+    # not seem to affect the GPU memory allocation when in this mode.
+    # When all the data is preloaded into cache before starting training,
+    # the GPU memory exploded, but dunno why - now it works *LOL*.
+
+    main_dataset = CacheDataset(
+        data=files,
+        transform=transformations,
+        num_workers=4,
+        # cache_rate=0.5,
+        # runtime_cache="processes",
+    )
+    # main_dataset = Dataset(
+    #     data=files,
+    #     transform=transformations,
+    # )
 
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
         main_dataset, [0.8, 0.1, 0.1]
@@ -216,6 +233,7 @@ def train_lightning(args):
         pin_memory=True,
         prefetch_factor=2,
         drop_last=False,
+        persistent_workers=False,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -225,6 +243,7 @@ def train_lightning(args):
         pin_memory=True,
         prefetch_factor=2,
         drop_last=False,
+        persistent_workers=False,
     )
     test_loader = DataLoader(
         test_dataset,
@@ -234,6 +253,7 @@ def train_lightning(args):
         pin_memory=True,
         prefetch_factor=2,
         drop_last=False,
+        persistent_workers=False,
     )
     model = LightningModel(
         loss=args.loss_function,
@@ -262,7 +282,7 @@ def train_lightning(args):
     print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
     strategy = BaguaStrategy(
-        algorithm="qadam",
+        algorithm="bytegrad",
     )
     trainer = pl.Trainer(
         devices="auto",
@@ -276,7 +296,8 @@ def train_lightning(args):
         callbacks=[model_checkpoint_callback, early_stopping_callback],
         log_every_n_steps=1,
     )
-
+    start = time.time()
     trainer.fit(model, train_dataloader, val_loader)
+    print(f"Training took {time.time() - start} seconds.")
     trainer.test(model, dataloaders=test_loader, ckpt_path="best")
     print("Finished training.")
