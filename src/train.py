@@ -15,7 +15,7 @@ from models.lightning_module import LightningModel
 from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
-import time
+
 import datetime
 
 # warnings.filterwarnings("ignore")
