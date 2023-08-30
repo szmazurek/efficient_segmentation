@@ -7,6 +7,8 @@ import lightning.pytorch as pl
 import monai
 import monai.transforms as tr
 import torch
+import wandb
+from codecarbon import OfflineEmissionsTracker
 
 from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
@@ -14,6 +16,7 @@ from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
 import time
+import datetime
 
 # warnings.filterwarnings("ignore")
 
@@ -172,6 +175,12 @@ def train(args):
 
 
 def train_lightning(args):
+    tracker = OfflineEmissionsTracker(
+        country_iso_code="POL",
+        output_dir="output_files/codecarbon",
+        output_file=f"{datetime.datetime.now()}.csv",
+    )
+    tracker.start()
     images = sorted(
         glob(os.path.join(args.training_data_path, "images/*.nii.gz"))
     )
@@ -268,10 +277,13 @@ def train_lightning(args):
         monitor="val_loss", patience=15, mode="min", verbose=True
     )
     if args.wandb:
-        wandb_logger = pl.loggers.WandbLogger(
-            project="E2MIP_Challenge_FetalBrainSegmentation",
+        wandb.init(
             entity="mazurek",
-            log_model=False,
+            project="E2MIP_Challenge_FetalBrainSegmentation",
+            group="optimizing_training",
+            name=args.exp_name,
+        )
+        wandb_logger = pl.loggers.WandbLogger(
             name=args.exp_name,
         )
     visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
@@ -290,14 +302,41 @@ def train_lightning(args):
         precision="16-mixed",
         strategy=strategy,
         num_nodes=1,
-        enable_model_summary=False,
+        enable_model_summary=True,
         max_epochs=args.epochs,
         logger=wandb_logger if args.wandb else None,
         callbacks=[model_checkpoint_callback, early_stopping_callback],
         log_every_n_steps=1,
     )
-    start = time.time()
+
     trainer.fit(model, train_dataloader, val_loader)
-    print(f"Training took {time.time() - start} seconds.")
-    trainer.test(model, dataloaders=test_loader, ckpt_path="best")
+    tracker.stop()
+    energy_training = round(tracker._total_energy.kWh * 3600, 3)
+    wandb.log({})
+    tracker = OfflineEmissionsTracker(
+        country_iso_code="POL",
+        output_dir="output_files/codecarbon",
+        output_file=f"{datetime.datetime.now()}.csv",
+    )
+    tracker.start()
+    results = trainer.test(model, dataloaders=test_loader, ckpt_path="best")
+    tracker.stop()
+    energy_inference = round(tracker._total_energy.kWh * 3600, 3)
+    training_efficiency_measure = (
+        results[0]["test_dice_score"] * 100 - energy_training
+    )
+    total_efficiency_measure = (
+        results[0]["test_dice_score"] * 100
+        - energy_training
+        - energy_inference
+    )
+    wandb.log(
+        {
+            "energy_training_kJ": energy_training,
+            "energy_inference_kJ": energy_inference,
+            "energy_total_kJ": energy_training + energy_inference,
+            "training_efficiency_measure": training_efficiency_measure,
+            "total_efficiency_measure": total_efficiency_measure,
+        }
+    )
     print("Finished training.")
