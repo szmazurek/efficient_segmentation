@@ -6,6 +6,10 @@ from utils import DiceLoss
 
 from mobilenetsmall import MobileNetV3Seg
 
+from micronet import MicroNet
+
+from efficientnet import get_efficientnet_seg
+
 def train(args):
     # Set up dataset and data loaders
     images_folder = os.path.join(args.training_data_path, "images")
@@ -23,7 +27,13 @@ def train(args):
 
     # Set up model, optimizer, and criterion
     #model = MobileNetV3Seg().to(device)
-    model = MobileNetV3Seg(nclass=args.num_classes, width_mult=1.0).to(device)
+
+
+    #model = MobileNetV3Seg(nclass=args.num_classes, width_mult=1.0).to(device)
+
+    #model = MicroNet(nb_classes=2).to(device)
+
+    model = get_efficientnet_seg()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     criterion = DiceLoss(n_classes=args.num_classes)

@@ -115,7 +115,7 @@ class Bottleneck(nn.Module):
 
 
 class MobileNetV3(nn.Module):
-    def __init__(self, nclass=2, mode='small', width_mult=1.0, dilated=True, pretrained_base=False, norm_layer=nn.BatchNorm2d):
+    def __init__(self, nclass=2, mode='small', width_mult=1.0, dilated=True, pretrained_base=True, norm_layer=nn.BatchNorm2d):
         super(MobileNetV3, self).__init__()
         if mode == 'large':
             layer1_setting = [
@@ -237,7 +237,7 @@ class MobileNetV3(nn.Module):
 
 #def get_mobilenet_v3(mode='small', width_mult=1.0, pretrained=False, root='~/,torch/models', **kwargs):
 def get_mobilenet_v3(width_mult=1.0, dilated=True, pretrained=False, **kwargs):
-    model = MobileNetV3(mode='small', width_mult=width_mult, pretrained_base=False, **kwargs)
+    model = MobileNetV3(mode='small', width_mult=width_mult, pretrained_base=True, **kwargs)
     if pretrained:
         raise ValueError("Not support pretrained")
     return model
@@ -282,7 +282,7 @@ class SegBaseModel(nn.Module):
 
 # MobileNetV3 for Semantic Segmentation
 class MobileNetV3Seg(SegBaseModel):
-    def __init__(self, nclass, aux=False, backbone='mobilenetv3_small', pretrained_base=False, **kwargs):
+    def __init__(self, nclass, aux=False, backbone='mobilenetv3_small', pretrained_base=True, **kwargs):
         super(MobileNetV3Seg, self).__init__(nclass, aux, backbone, pretrained_base, **kwargs)
         self.head = _SegHead(nclass, self.mode, **kwargs)
         if aux:
@@ -343,5 +343,5 @@ class _LRASPP(nn.Module):
 
 if __name__ == '__main__':
     # Initialize the MobileNetV3Seg model
-    model = MobileNetV3Seg(nclass=19, aux=True, backbone='mobilenetv3_small', pretrained_base=False)
+    model = MobileNetV3Seg(nclass=19, aux=True, backbone='mobilenetv3_small', pretrained_base=True)
     print(model)
