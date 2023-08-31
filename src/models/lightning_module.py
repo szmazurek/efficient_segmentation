@@ -25,6 +25,14 @@ class LightningModel(pl.LightningModule):
             self.model = UNet(in_channels, in_channels, init_features)
         elif model == "AttSqueezeUnet":
             self.model = AttSqueezeUNet(1, in_shape)
+        elif model == "UnetSMP":
+            self.model = smp.MAnet(
+                encoder_name="efficientnet-b0",
+                classes=1,
+                in_channels=1,
+                encoder_weights="imagenet",
+                activation="sigmoid",
+            )
         if loss == "DiceLoss":
             self.loss = smp.losses.DiceLoss(mode="binary", from_logits=False)
         elif loss == "MCCLoss":

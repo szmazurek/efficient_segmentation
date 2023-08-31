@@ -8,6 +8,7 @@ import monai
 import monai.transforms as tr
 import torch
 import wandb
+import numpy as np
 from codecarbon import OfflineEmissionsTracker
 
 from lightning_bagua import BaguaStrategy
@@ -63,11 +64,11 @@ def train(args):
     n_split = int(0.8 * len(files))
 
     train_ds = Dataset(data=files[:n_split], transform=transformations)
+    val_ds = Dataset(data=files[-n_split:], transform=transformations)
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True, num_workers=8
     )
 
-    val_ds = Dataset(data=files[-n_split:], transform=transformations)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, num_workers=4)
 
     # define metrics
@@ -217,21 +218,35 @@ def train_lightning(args):
     # not seem to affect the GPU memory allocation when in this mode.
     # When all the data is preloaded into cache before starting training,
     # the GPU memory exploded, but dunno why - now it works *LOL*.
-
-    main_dataset = CacheDataset(
-        data=files,
+    random.shuffle(files)
+    file_indices = list(range(len(files)))
+    val_random_indices = random.sample(file_indices, int(len(files) * 0.2))
+    train_remaining_indices = list(set(file_indices) - set(val_random_indices))
+    val_random_indices, test_random_indices = (
+        val_random_indices[: len(val_random_indices) // 2],
+        val_random_indices[len(val_random_indices) // 2 :],
+    )
+    print(
+        f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
+    )
+    print(f"Train indices: {train_remaining_indices}")
+    print(f"Val indices: {val_random_indices}")
+    print(f"Test indices: {test_random_indices}")
+    files = np.array(files)
+    train_dataset = CacheDataset(
+        data=files[train_remaining_indices],
         transform=transformations,
         num_workers=4,
-        # cache_rate=0.5,
-        # runtime_cache="processes",
     )
-    # main_dataset = Dataset(
-    #     data=files,
-    #     transform=transformations,
-    # )
-
-    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-        main_dataset, [0.8, 0.1, 0.1]
+    val_dataset = CacheDataset(
+        data=files[val_random_indices],
+        transform=transformations,
+        num_workers=4,
+    )
+    test_dataset = CacheDataset(
+        data=files[test_random_indices],
+        transform=transformations,
+        num_workers=4,
     )
 
     train_dataloader = DataLoader(
@@ -276,25 +291,29 @@ def train_lightning(args):
     early_stopping_callback = pl.callbacks.EarlyStopping(
         monitor="val_loss", patience=15, mode="min", verbose=True
     )
+    lr_finder_callback = pl.callbacks.LearningRateFinder(
+        min_lr=1e-6,
+        max_lr=1e-1,
+        num_training_steps=100,
+    )
     if args.wandb:
-        wandb.init(
-            entity="mazurek",
-            project="E2MIP_Challenge_FetalBrainSegmentation",
-            group="optimizing_training",
-            name=args.exp_name,
-        )
+        if int(os.environ["SLURM_PROCID"]) == 0:
+            wandb.init(
+                entity="mazurek",
+                project="E2MIP_Challenge_FetalBrainSegmentation",
+                group="hparam_optimization",
+                name=args.exp_name,
+            )
         wandb_logger = pl.loggers.WandbLogger(
             name=args.exp_name,
         )
     visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
     # strategy = pl.strategies.DDPStrategy(find_unused_parameters=False)
-    # pl.strategies.SingleDeviceStrategy(device=args.device)
-    # if visible_devices == 1
-    # else
+
     print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
     strategy = BaguaStrategy(
-        algorithm="bytegrad",
+        algorithm="gradient_allreduce",
     )
     trainer = pl.Trainer(
         devices="auto",
@@ -305,14 +324,17 @@ def train_lightning(args):
         enable_model_summary=True,
         max_epochs=args.epochs,
         logger=wandb_logger if args.wandb else None,
-        callbacks=[model_checkpoint_callback, early_stopping_callback],
+        callbacks=[
+            model_checkpoint_callback,
+            early_stopping_callback,
+            lr_finder_callback,
+        ],
         log_every_n_steps=1,
     )
 
     trainer.fit(model, train_dataloader, val_loader)
     tracker.stop()
     energy_training = round(tracker._total_energy.kWh * 3600, 3)
-    wandb.log({})
     tracker = OfflineEmissionsTracker(
         country_iso_code="POL",
         output_dir="output_files/codecarbon",
@@ -330,13 +352,15 @@ def train_lightning(args):
         - energy_training
         - energy_inference
     )
-    wandb.log(
-        {
-            "energy_training_kJ": energy_training,
-            "energy_inference_kJ": energy_inference,
-            "energy_total_kJ": energy_training + energy_inference,
-            "training_efficiency_measure": training_efficiency_measure,
-            "total_efficiency_measure": total_efficiency_measure,
-        }
-    )
+    if int(os.environ["SLURM_PROCID"]) == 0:
+        wandb.log(
+            {
+                "energy_training_kJ": energy_training,
+                "energy_inference_kJ": energy_inference,
+                "energy_total_kJ": energy_training + energy_inference,
+                "training_efficiency_measure": training_efficiency_measure,
+                "total_efficiency_measure": total_efficiency_measure,
+            }
+        )
+        wandb.finish()
     print("Finished training.")

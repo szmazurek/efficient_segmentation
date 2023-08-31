@@ -2,7 +2,7 @@ from train import train_lightning
 from test import test_lightning
 import argparse
 
-AVAILABLE_MODELS = ["Unet", "AttSqueezeUnet"]
+AVAILABLE_MODELS = ["Unet", "AttSqueezeUnet", "UnetSMP"]
 AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss"]
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int)

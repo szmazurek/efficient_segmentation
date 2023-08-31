@@ -4,7 +4,7 @@
 ## Liczba alokowanych węzłów
 #SBATCH -N 1
 ## Liczba zadań per węzeł (domyślnie jest to liczba alokowanych rdzeni na węźle)
-#SBATCH --ntasks-per-node=2
+#SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=4
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
 #SBATCH --mem-per-cpu=5GB
@@ -14,7 +14,7 @@
 #SBATCH -A plgsano4-gpu-a100
 ## Specyfikacja partycji
 #SBATCH --partition plgrid-gpu-a100
-#SBATCH --gpus=2
+#SBATCH --gpus=4
 ## Plik ze standardowym wyjściem
 #SBATCH --output="output_files/stdout.out"
 ## Plik ze standardowym wyjściem błędó0w
@@ -35,13 +35,13 @@ export OMPI_MCA_opal_cuda_support=true
 
 srun -u python  src/main.py \
     --train \
-    --training_data_path data/training_data \
+    --training_data_path data/training_data/ \
     --lr 0.001 \
     --num_classes 1 \
     --epochs 50 \
     --batch_size 32 \
-    --model AttSqueezeUnet \
+    --model Unet \
     --loss_function MCCLoss \
-    --exp_name "Adam" \
+    --exp_name "unet" \
     --wandb
 
