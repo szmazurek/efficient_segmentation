@@ -17,16 +17,51 @@ from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
 
-# import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
-# from lightning.pytorch.callbacks import ModelPruning
+import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
+from lightning.pytorch.callbacks import ModelPruning
 import datetime
 
-# import torch_pruning as tp
+import torch_pruning as tp
 import torchsummary
 
 # warnings.filterwarnings("ignore")
 
 pl.seed_everything(42)
+
+
+class TPPruningCallback(pl.Callback):
+    def on_train_start(self, trainer, pl_module):
+        imp = tp.importance.TaylorImportance()
+        self.sample_input = torch.randn(
+            1,
+            1,
+            256,
+            256,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
+        self.pruner = tp.pruner.MetaPruner(  # We can always choose MetaPruner if sparse training is not required.
+            pl_module.model,
+            self.sample_input,
+            importance=imp,
+            iterative_steps=5,
+            global_pruning=True,
+            ch_sparsity=0.1,  # remove 50% channels, ResNet18 = {64, 128, 256, 512} => ResNet18_Half = {32, 64, 128, 256}
+        )
+        self.step_done = False
+
+    def on_after_backward(self, trainer, pl_module):
+        if trainer.current_epoch % 5 == 0 and not self.step_done:
+            self.pruner.step()
+            self.step_done = True
+            base_macs, base_nparams = tp.utils.count_ops_and_params(
+                pl_module, self.sample_input
+            )
+            print(base_macs)
+            print(base_nparams)
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        if self.step_done:
+            self.step_done = False
 
 
 def train(args):
@@ -322,7 +357,7 @@ def train_lightning(args):
         )
     visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
     strategy = pl.strategies.DDPStrategy(
-        find_unused_parameters=False, static_graph=True
+        find_unused_parameters=True, static_graph=False
     )
     # strategy = pl.strategies.DDPStrategy(
     #     ddp_comm_state=powerSGD.PowerSGDState(
@@ -345,6 +380,7 @@ def train_lightning(args):
     #     start_powerSGD_iter=1_000,
     # )
     # model.register_comm_hook(state, PowerSGD.powerSGD_hook)
+    pruning_callback = TPPruningCallback()
     trainer = pl.Trainer(
         devices="auto",
         accelerator="gpu",
@@ -357,7 +393,7 @@ def train_lightning(args):
         callbacks=[
             model_checkpoint_callback,
             early_stopping_callback,
-            # pruning_callback
+            pruning_callback
             # lr_finder_callback,
         ],
         log_every_n_steps=1,
