@@ -13,7 +13,13 @@ from codecarbon import OfflineEmissionsTracker
 
 from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
-from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
+from monai.data import (
+    DataLoader,
+    Dataset,
+    CacheDataset,
+    decollate_batch,
+    partition_dataset,
+)
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
 
@@ -234,22 +240,31 @@ def train_lightning(args):
     print(
         f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
     )
-    print(f"Train indices: {train_remaining_indices}")
-    print(f"Val indices: {val_random_indices}")
-    print(f"Test indices: {test_random_indices}")
     files = np.array(files)
-    train_dataset = CacheDataset(
+
+    train_data_partitioned = partition_dataset(
         data=files[train_remaining_indices],
+        num_partitions=2,
+        shuffle=True,
+        even_divisible=False,
+        seed=42,
+    )[int(os.environ["SLURM_PROCID"])]
+
+    val_data_partitioned = partition_dataset(
+        data=files[val_random_indices],
+        num_partitions=2,
+        shuffle=True,
+        even_divisible=False,
+        seed=42,
+    )[int(os.environ["SLURM_PROCID"])]
+
+    train_dataset = CacheDataset(
+        data=train_data_partitioned,
         transform=transformations,
         num_workers=4,
     )
     val_dataset = CacheDataset(
-        data=files[val_random_indices],
-        transform=transformations,
-        num_workers=4,
-    )
-    test_dataset = CacheDataset(
-        data=files[test_random_indices],
+        data=val_data_partitioned,
         transform=transformations,
         num_workers=4,
     )
@@ -274,16 +289,7 @@ def train_lightning(args):
         drop_last=False,
         persistent_workers=False,
     )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        prefetch_factor=2,
-        drop_last=False,
-        persistent_workers=False,
-    )
+
     model = LightningModel(
         loss=args.loss_function,
         model=args.model,
@@ -324,16 +330,7 @@ def train_lightning(args):
     strategy = pl.strategies.DDPStrategy(
         find_unused_parameters=False, static_graph=True
     )
-    # strategy = pl.strategies.DDPStrategy(
-    #     ddp_comm_state=powerSGD.PowerSGDState(
-    #         process_group=None,
-    #         matrix_approximation_rank=1,
-    #         start_powerSGD_iter=100,
-    #     ),
-    #     ddp_comm_hook=powerSGD.powerSGD_hook,
-    #     find_unused_parameters=False,
-    #     static_graph=True,
-    # )
+
     print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
     # strategy = BaguaStrategy(
@@ -357,7 +354,6 @@ def train_lightning(args):
         callbacks=[
             model_checkpoint_callback,
             early_stopping_callback,
-            # pruning_callback
             # lr_finder_callback,
         ],
         log_every_n_steps=1,
@@ -371,10 +367,32 @@ def train_lightning(args):
     energy_training = round(tracker._total_energy.kWh * 3600, 3)
     tracker = OfflineEmissionsTracker(
         country_iso_code="POL",
-        output_dir="output_files/codecarbon",
-        output_file=f"{datetime.datetime.now()}.csv",
+        # output_dir="output_files/codecarbon",
+        # output_file=f"{datetime.datetime.now()}.csv",
     )
     tracker.start()
+    test_data_partitioned = partition_dataset(
+        data=files[test_random_indices],
+        num_partitions=2,
+        seed=42,
+        shuffle=False,
+        even_divisible=False,
+    )[int(os.environ["SLURM_PROCID"])]
+    test_dataset = CacheDataset(
+        data=test_data_partitioned,
+        transform=transformations,
+        num_workers=4,
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
+        persistent_workers=False,
+    )
     results = trainer.test(model, dataloaders=test_loader, ckpt_path="best")
     tracker.stop()
     energy_inference = round(tracker._total_energy.kWh * 3600, 3)
