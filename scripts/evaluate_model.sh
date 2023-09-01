@@ -22,7 +22,7 @@
 ml CUDA/11.7
 # conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
 conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
-cd $SCRATCH/energy_efficient_ai/E2MIP_Challenge_FetalBrainSegmentation
+cd $SCRATCH/energy_efficient_ai/efficient_segmentation
 srun python src/main.py \
     --test \
     --testing_data_path data/testing_data \

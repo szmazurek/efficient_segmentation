@@ -14,7 +14,6 @@ class LightningModel(pl.LightningModule):
         model="Unet",
         loss="DiceLoss",
         in_channels=1,
-        out_channels=2,
         init_features=64,
         lr=1e-3,
         in_shape=(None, 1, 256, 256),
@@ -37,6 +36,7 @@ class LightningModel(pl.LightningModule):
             self.loss = smp.losses.DiceLoss(mode="binary", from_logits=False)
         elif loss == "MCCLoss":
             self.loss = smp.losses.MCCLoss()
+
         self.dice_score = Dice(multiclass=False, average="micro")
         self.lr = lr
 

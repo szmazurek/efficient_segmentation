@@ -17,7 +17,12 @@ from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
 
+# import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
+# from lightning.pytorch.callbacks import ModelPruning
 import datetime
+
+# import torch_pruning as tp
+import torchsummary
 
 # warnings.filterwarnings("ignore")
 
@@ -178,8 +183,8 @@ def train(args):
 def train_lightning(args):
     tracker = OfflineEmissionsTracker(
         country_iso_code="POL",
-        output_dir="output_files/codecarbon",
-        output_file=f"{datetime.datetime.now()}.csv",
+        # output_dir="output_files/codecarbon",
+        # output_file=f"{datetime.datetime.now()}.csv",
     )
     tracker.start()
     images = sorted(
@@ -285,36 +290,61 @@ def train_lightning(args):
         in_shape=(None, 1, args.img_size, args.img_size),
         lr=args.lr,
     )
+
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
         save_top_k=1, mode="min", monitor="val_loss"
     )
     early_stopping_callback = pl.callbacks.EarlyStopping(
-        monitor="val_loss", patience=15, mode="min", verbose=True
+        monitor="val_loss",
+        patience=15,
+        mode="min",
+        verbose=True,
+        min_delta=0.01,
     )
-    lr_finder_callback = pl.callbacks.LearningRateFinder(
-        min_lr=1e-6,
-        max_lr=1e-1,
-        num_training_steps=100,
-    )
+
+    # lr_finder_callback = pl.callbacks.LearningRateFinder(
+    #     min_lr=1e-6,
+    #     max_lr=1e-1,
+    #     num_training_steps=100,
+    # )
+    print("Model summary:")
+    print(torchsummary.summary(model, (1, 256, 256), device="cpu"))
     if args.wandb:
         if int(os.environ["SLURM_PROCID"]) == 0:
             wandb.init(
                 entity="mazurek",
                 project="E2MIP_Challenge_FetalBrainSegmentation",
-                group="hparam_optimization",
+                group="pruning",
                 name=args.exp_name,
             )
         wandb_logger = pl.loggers.WandbLogger(
             name=args.exp_name,
         )
     visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
-    # strategy = pl.strategies.DDPStrategy(find_unused_parameters=False)
-
+    strategy = pl.strategies.DDPStrategy(
+        find_unused_parameters=False, static_graph=True
+    )
+    # strategy = pl.strategies.DDPStrategy(
+    #     ddp_comm_state=powerSGD.PowerSGDState(
+    #         process_group=None,
+    #         matrix_approximation_rank=1,
+    #         start_powerSGD_iter=100,
+    #     ),
+    #     ddp_comm_hook=powerSGD.powerSGD_hook,
+    #     find_unused_parameters=False,
+    #     static_graph=True,
+    # )
     print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
-    strategy = BaguaStrategy(
-        algorithm="gradient_allreduce",
-    )
+    # strategy = BaguaStrategy(
+    #     algorithm="gradient_allreduce",
+    # )
+    # state = powerSGD.PowerSGDState(
+    #     process_group=None,
+    #     matrix_approximation_rank=1,
+    #     start_powerSGD_iter=1_000,
+    # )
+    # model.register_comm_hook(state, PowerSGD.powerSGD_hook)
     trainer = pl.Trainer(
         devices="auto",
         accelerator="gpu",
@@ -327,12 +357,16 @@ def train_lightning(args):
         callbacks=[
             model_checkpoint_callback,
             early_stopping_callback,
-            lr_finder_callback,
+            # pruning_callback
+            # lr_finder_callback,
         ],
         log_every_n_steps=1,
+        num_sanity_val_steps=0,
     )
 
     trainer.fit(model, train_dataloader, val_loader)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"PRUNED MODEL: {total_params}")
     tracker.stop()
     energy_training = round(tracker._total_energy.kWh * 3600, 3)
     tracker = OfflineEmissionsTracker(
