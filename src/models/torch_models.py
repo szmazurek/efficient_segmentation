@@ -426,3 +426,858 @@ class AttSqueezeUNet(nn.Module):
         d = self.conv_3(d0)
 
         return d
+
+
+"""Searching for MobileNetV3"""
+__all__ = ["MobileNetV3", "get_mobilenet_v3", "mobilenet_v3_small_1_0"]
+
+__all__ = ["Hswish", "ConvBNHswish", "Bottleneck", "SEModule"]
+
+
+class Hswish(nn.Module):
+    def __init__(self, inplace=True):
+        super(Hswish, self).__init__()
+        self.relu6 = nn.ReLU6(inplace)
+
+    def forward(self, x):
+        return x * self.relu6(x + 3.0) / 6.0
+
+
+class Hsigmoid(nn.Module):
+    def __init__(self, inplace=True):
+        super(Hsigmoid, self).__init__()
+        self.relu6 = nn.ReLU6(inplace)
+
+    def forward(self, x):
+        return self.relu6(x + 3.0) / 6.0
+
+
+class ConvBNHswish(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        norm_layer=nn.BatchNorm2d,
+        **kwargs
+    ):
+        super(ConvBNHswish, self).__init__()
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+            bias=False,
+        )
+        self.bn = norm_layer(out_channels)
+        self.act = Hswish(True)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.act(x)
+        return x
+
+
+class SEModule(nn.Module):
+    def __init__(self, in_channels, reduction=4):
+        super(SEModule, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(in_channels, in_channels // reduction, bias=False),
+            nn.ReLU(True),
+            nn.Linear(in_channels // reduction, in_channels, bias=False),
+            Hsigmoid(True),
+        )
+
+    def forward(self, x):
+        n, c, _, _ = x.size()
+        out = self.avg_pool(x).view(n, c)
+        out = self.fc(out).view(n, c, 1, 1)
+        return x * out.expand_as(x)
+
+
+class Identity(nn.Module):
+    def __init__(self, in_channels):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+class Bottleneck(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        exp_size,
+        kernel_size,
+        stride,
+        dilation=1,
+        se=False,
+        nl="RE",
+        norm_layer=nn.BatchNorm2d,
+        **kwargs
+    ):
+        super(Bottleneck, self).__init__()
+        assert stride in [1, 2]
+        self.use_res_connect = stride == 1 and in_channels == out_channels
+        if nl == "HS":
+            act = Hswish
+        else:
+            act = nn.ReLU
+        if se:
+            SELayer = SEModule
+        else:
+            SELayer = Identity
+
+        self.conv = nn.Sequential(
+            # pw
+            nn.Conv2d(in_channels, exp_size, 1, bias=False),
+            norm_layer(exp_size),
+            act(True),
+            # dw
+            nn.Conv2d(
+                exp_size,
+                exp_size,
+                kernel_size,
+                stride,
+                (kernel_size - 1) // 2 * dilation,
+                dilation,
+                groups=exp_size,
+                bias=False,
+            ),
+            norm_layer(exp_size),
+            SELayer(exp_size),
+            act(True),
+            # pw-linear
+            nn.Conv2d(exp_size, out_channels, 1, bias=False),
+            norm_layer(out_channels),
+        )
+
+    def forward(self, x):
+        if self.use_res_connect:
+            return x + self.conv(x)
+        else:
+            return self.conv(x)
+
+
+# if __name__ == '__main__':
+#     img = torch.randn(1, 16, 64, 64)
+#     model = Bottleneck(16, 16, 16, 3, 1)
+#     out = model(img)
+#     print(out.size())
+
+
+class MobileNetV3(nn.Module):
+    def __init__(
+        self,
+        nclass=2,
+        mode="small",
+        width_mult=1.0,
+        dilated=True,
+        pretrained_base=True,
+        norm_layer=nn.BatchNorm2d,
+    ):
+        super(MobileNetV3, self).__init__()
+        if mode == "large":
+            layer1_setting = [
+                # k, exp_size, c, se, nl, s
+                [3, 16, 16, False, "RE", 1],
+                [3, 64, 24, False, "RE", 2],
+                [3, 72, 24, False, "RE", 1],
+            ]
+            layer2_setting = [
+                [5, 72, 40, True, "RE", 2],
+                [5, 120, 40, True, "RE", 1],
+                [5, 120, 40, True, "RE", 1],
+            ]
+            layer3_setting = [
+                [3, 240, 80, False, "HS", 2],
+                [3, 200, 80, False, "HS", 1],
+                [3, 184, 80, False, "HS", 1],
+                [3, 184, 80, False, "HS", 1],
+                [3, 480, 112, True, "HS", 1],
+                [3, 672, 112, True, "HS", 1],
+                [5, 672, 112, True, "HS", 1],
+            ]
+            layer4_setting = [
+                [5, 672, 160, True, "HS", 2],
+                [5, 960, 160, True, "HS", 1],
+            ]
+        elif mode == "small":
+            layer1_setting = [
+                # k, exp_size, c, se, nl, s
+                [3, 16, 16, True, "RE", 2],
+            ]
+            layer2_setting = [
+                [3, 72, 24, False, "RE", 2],
+                [3, 88, 24, False, "RE", 1],
+            ]
+            layer3_setting = [
+                [5, 96, 40, True, "HS", 2],
+                [5, 240, 40, True, "HS", 1],
+                [5, 240, 40, True, "HS", 1],
+                [5, 120, 48, True, "HS", 1],
+                [5, 144, 48, True, "HS", 1],
+            ]
+            layer4_setting = [
+                [5, 288, 96, True, "HS", 2],
+                [5, 576, 96, True, "HS", 1],
+                [5, 576, 96, True, "HS", 1],
+            ]
+        else:
+            raise ValueError("Unknown mode.")
+
+        # building first layer
+        input_channels = int(16 * width_mult) if width_mult > 1.0 else 16
+        self.conv1 = ConvBNHswish(
+            1, input_channels, 3, 2, 1, norm_layer=norm_layer
+        )
+
+        # building bottleneck blocks
+        self.layer1, input_channels = self._make_layer(
+            Bottleneck,
+            input_channels,
+            layer1_setting,
+            width_mult,
+            norm_layer=norm_layer,
+        )
+        self.layer2, input_channels = self._make_layer(
+            Bottleneck,
+            input_channels,
+            layer2_setting,
+            width_mult,
+            norm_layer=norm_layer,
+        )
+        self.layer3, input_channels = self._make_layer(
+            Bottleneck,
+            input_channels,
+            layer3_setting,
+            width_mult,
+            norm_layer=norm_layer,
+        )
+        if dilated:
+            self.layer4, input_channels = self._make_layer(
+                Bottleneck,
+                input_channels,
+                layer4_setting,
+                width_mult,
+                dilation=2,
+                norm_layer=norm_layer,
+            )
+        else:
+            self.layer4, input_channels = self._make_layer(
+                Bottleneck,
+                input_channels,
+                layer4_setting,
+                width_mult,
+                norm_layer=norm_layer,
+            )
+
+        # building last several layers
+        classifier = list()
+        if mode == "large":
+            last_bneck_channels = (
+                int(960 * width_mult) if width_mult > 1.0 else 960
+            )
+            self.conv5 = ConvBNHswish(
+                input_channels, last_bneck_channels, 1, norm_layer=norm_layer
+            )
+            classifier.append(nn.AdaptiveAvgPool2d(1))
+            classifier.append(nn.Conv2d(last_bneck_channels, 1280, 1))
+            classifier.append(Hswish(True))
+            classifier.append(nn.Conv2d(1280, nclass, 1))
+        elif mode == "small":
+            last_bneck_channels = (
+                int(576 * width_mult) if width_mult > 1.0 else 576
+            )
+            self.conv5 = ConvBNHswish(
+                input_channels, last_bneck_channels, 1, norm_layer=norm_layer
+            )
+            classifier.append(SEModule(last_bneck_channels))
+            classifier.append(nn.AdaptiveAvgPool2d(1))
+            classifier.append(nn.Conv2d(last_bneck_channels, 1280, 1))
+            classifier.append(Hswish(True))
+            classifier.append(nn.Conv2d(1280, nclass, 1))
+        else:
+            raise ValueError("Unknown mode.")
+        self.classifier = nn.Sequential(*classifier)
+
+        self._init_weights()
+
+    def _make_layer(
+        self,
+        block,
+        input_channels,
+        block_setting,
+        width_mult,
+        dilation=1,
+        norm_layer=nn.BatchNorm2d,
+    ):
+        layers = list()
+        for k, exp_size, c, se, nl, s in block_setting:
+            s = 1 if dilation != 1 else s
+            out_channels = int(c * width_mult)
+            exp_channels = int(exp_size * width_mult)
+            layers.append(
+                block(
+                    input_channels,
+                    out_channels,
+                    exp_channels,
+                    k,
+                    s,
+                    dilation,
+                    se,
+                    nl,
+                    norm_layer,
+                )
+            )
+            input_channels = out_channels
+        return nn.Sequential(*layers), input_channels
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.conv5(x)
+        x = self.classifier(x)
+        x = x.view(x.size(0), x.size(1))
+        return x
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out")
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+
+# def get_mobilenet_v3(mode='small', width_mult=1.0, pretrained=False, root='~/,torch/models', **kwargs):
+def get_mobilenet_v3(width_mult=1.0, dilated=True, pretrained=False, **kwargs):
+    model = MobileNetV3(
+        mode="small", width_mult=width_mult, pretrained_base=True, **kwargs
+    )
+    if pretrained:
+        raise ValueError("Not support pretrained")
+    return model
+
+
+# def mobilenet_v3_small_1_0(**kwargs):
+#     return get_mobilenet_v3(width_mult=1.0, **kwargs)a
+
+
+def mobilenet_v3_small_1_0(width_mult=1.0, **kwargs):
+    return get_mobilenet_v3(width_mult=width_mult, **kwargs)
+
+
+# if __name__ == '__main__':
+#     model = mobilenet_v3_small_1_0()
+
+
+# Base Model for Semantic Segmentation
+class SegBaseModel(nn.Module):
+    def __init__(
+        self,
+        nclass,
+        aux=False,
+        backbone="mobilenetv3_small",
+        pretrained_base=True,
+        **kwargs
+    ):
+        super(SegBaseModel, self).__init__()
+        self.nclass = nclass
+        self.aux = aux
+        self.mode = backbone.split("_")[-1]
+        assert self.mode in ["large", "small"]
+        if backbone == "mobilenetv3_small":
+            self.pretrained = mobilenet_v3_small_1_0(
+                dilated=True, pretrained=pretrained_base, **kwargs
+            )
+        else:
+            raise RuntimeError("unknown backbone: {}".format(backbone))
+
+    def base_forward(self, x):
+        """forwarding pre-trained network"""
+        x = self.pretrained.conv1(x)
+
+        c1 = self.pretrained.layer1(x)
+        c2 = self.pretrained.layer2(c1)
+        c3 = self.pretrained.layer3(c2)
+        c4 = self.pretrained.layer4(c3)
+        c4 = self.pretrained.conv5(c4)
+
+        return c1, c2, c3, c4
+
+
+# MobileNetV3 for Semantic Segmentation
+class MobileNetV3Seg(SegBaseModel):
+    def __init__(
+        self,
+        nclass,
+        aux=False,
+        backbone="mobilenetv3_small",
+        pretrained_base=True,
+        **kwargs
+    ):
+        super(MobileNetV3Seg, self).__init__(
+            nclass, aux, backbone, pretrained_base, **kwargs
+        )
+        self.head = _SegHead(nclass, self.mode, **kwargs)
+        if aux:
+            inter_channels = 40 if self.mode == "small" else 24
+            self.auxlayer = nn.Conv2d(inter_channels, nclass, 1)
+
+    def forward(self, x):
+        size = x.size()[2:]
+        _, c2, _, c4 = self.base_forward(x)
+        outputs = list()
+        x = self.head(c4)
+        x = F.interpolate(x, size, mode="bilinear", align_corners=True)
+        outputs.append(x)
+
+        if self.aux:
+            auxout = self.auxlayer(c2)
+            auxout = F.interpolate(
+                auxout, size, mode="bilinear", align_corners=True
+            )
+            outputs.append(auxout)
+        return F.sigmoid(x)  # tuple(outputs)
+
+
+class _SegHead(nn.Module):
+    def __init__(
+        self, nclass, mode="small", norm_layer=nn.BatchNorm2d, **kwargs
+    ):
+        super(_SegHead, self).__init__()
+        in_channels = 960 if mode == "large" else 576
+        self.lr_aspp = _LRASPP(in_channels, norm_layer, **kwargs)
+        self.project = nn.Conv2d(128, nclass, 1)
+
+    def forward(self, x):
+        x = self.lr_aspp(x)
+        return self.project(x)
+
+
+class _LRASPP(nn.Module):
+    def __init__(self, in_channels, norm_layer, **kwargs):
+        super(_LRASPP, self).__init__()
+        out_channels = 128
+        self.b0 = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            norm_layer(out_channels),
+            nn.ReLU(True),
+        )
+        self.b1 = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),  # Use adaptive average pooling
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        size = x.size()[2:]
+        feat1 = self.b0(x)
+        feat2 = self.b1(x)
+        feat2 = F.interpolate(feat2, size, mode="bilinear", align_corners=True)
+        x = feat1 * feat2
+        return x
+
+
+class FireModuleMicronet(nn.Module):
+    def __init__(
+        self,
+        fire_i,
+        base_e,
+        freq,
+        squeeze_ratio,
+        pct_3x3,
+        dilation_rate,
+        activation,
+        kernel_initializer,
+        data_format,
+        use_bias=False,
+        decoder=False,
+    ):
+        super(FireModuleMicronet, self).__init__()
+        e_i, s_1x1, e_1x1, e_3x3 = self.get_fire_config(
+            fire_i, base_e, freq, squeeze_ratio, pct_3x3
+        )
+        self.decoder = decoder
+
+        if decoder:
+            d = "decoder_"
+        else:
+            d = ""
+
+        self.squeeze = nn.Conv2d(
+            in_channels=e_i, out_channels=s_1x1, kernel_size=1, bias=use_bias
+        )
+        self.fire2_expand1 = nn.Conv2d(
+            in_channels=s_1x1,
+            out_channels=e_1x1,
+            kernel_size=1,
+            bias=use_bias,
+            padding="same",
+        )
+        self.fire2_expand2 = nn.Conv2d(
+            in_channels=s_1x1,
+            out_channels=e_3x3,
+            kernel_size=3,
+            padding="same",
+            dilation=dilation_rate,
+            bias=use_bias,
+        )
+
+    def forward(self, inputs):
+        squeeze = self.squeeze(inputs)
+        fire2_expand1 = self.fire2_expand1(F.relu(squeeze))
+        fire2_expand2 = self.fire2_expand2(F.relu(squeeze))
+        merge = torch.cat([fire2_expand1, fire2_expand2], dim=1)
+        return merge
+
+    def get_fire_config(self, i, base_e, freq, squeeze_ratio, pct_3x3):
+        e_i = base_e * (2 ** (i // freq))
+        s_1x1 = int(squeeze_ratio * e_i)
+        e_3x3 = int(pct_3x3 * e_i)
+        e_1x1 = e_i - e_3x3
+        return e_i, s_1x1, e_1x1, e_3x3
+
+
+class MicroNet(nn.Module):
+    def __init__(
+        self,
+        nb_classes=2,
+        base_e=64,
+        freq=4,
+        squeeze_ratio=0.25,
+        pct_3x3=0.5,
+        inputs_shape=(3, 224, 224),
+        use_bias=False,
+        data_format="channels_first",
+        activation=nn.ReLU(),
+        kernel_initializer=None,
+    ):
+        super(MicroNet, self).__init__()
+
+        self.inputs = nn.Conv2d(inputs_shape[0], base_e, kernel_size=1)
+
+        # Encoder
+        self.conv1 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv2 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv3 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            2,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv4 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            3,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv5 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv6 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv7 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            2,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv8 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            3,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv9 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv10 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv11 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            2,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+        self.conv12 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            3,
+            activation,
+            kernel_initializer,
+            data_format,
+        )
+
+        # Decoder
+        self.d_conv11 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            3,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.d_conv10 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            2,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.d_conv9 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.up2 = nn.ConvTranspose2d(
+            in_channels=base_e, out_channels=base_e, kernel_size=2, stride=2
+        )
+
+        self.d_conv8 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            3,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.d_conv7 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            2,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.d_conv6 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.up1 = nn.ConvTranspose2d(
+            in_channels=64, out_channels=64, kernel_size=2, stride=2
+        )
+
+        self.d_conv5 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            3,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.d_conv4 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            2,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+        self.d_conv3 = self.create_fire_modules(
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            1,
+            activation,
+            kernel_initializer,
+            data_format,
+            decoder=True,
+        )
+
+        # Classifier
+        self.out_conv = nn.Conv2d(base_e, nb_classes, kernel_size=1)
+
+    def forward(self, x):
+        inputs = self.inputs(x)
+
+        # Encoder
+        conv1 = self.conv1(inputs)
+        conv2 = self.conv2(conv1)
+        conv3 = self.conv3(conv2)
+        conv4 = self.conv4(conv3)
+        pool1 = self.pool1(conv4)
+
+        conv5 = self.conv5(pool1)
+        conv6 = self.conv6(conv5)
+        conv7 = self.conv7(conv6)
+        conv8 = self.conv8(conv7)
+        pool2 = self.pool2(conv8)
+
+        conv9 = self.conv9(pool2)
+        conv10 = self.conv10(conv9)
+        conv11 = self.conv11(conv10)
+        conv12 = self.conv12(conv11)
+
+        # Decoder
+        d_conv11 = self.d_conv11(conv12)
+        d_conv10 = self.d_conv10(d_conv11)
+        d_conv9 = self.d_conv9(d_conv10)
+        up2 = self.up2(d_conv9)
+
+        d_conv8 = self.d_conv8(up2 + conv8)
+        d_conv7 = self.d_conv7(d_conv8)
+        d_conv6 = self.d_conv6(d_conv7)
+        up1 = self.up1(d_conv6)
+
+        d_conv5 = self.d_conv5(up1 + conv4)
+        d_conv4 = self.d_conv4(d_conv5)
+        d_conv3 = self.d_conv3(d_conv4)
+
+        # Classifier
+        out_conv = self.out_conv(d_conv3)
+        return F.softmax(out_conv, dim=1)
+
+    def create_fire_modules(
+        self,
+        base_e,
+        freq,
+        squeeze_ratio,
+        pct_3x3,
+        dilation_rate,
+        activation,
+        kernel_initializer,
+        data_format,
+        use_bias=False,
+        decoder=False,
+    ):
+        return FireModuleMicronet(
+            0,
+            base_e,
+            freq,
+            squeeze_ratio,
+            pct_3x3,
+            dilation_rate,
+            activation,
+            kernel_initializer,
+            data_format,
+            use_bias,
+            decoder,
+        )
