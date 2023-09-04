@@ -2,7 +2,8 @@ import os
 import pandas as pd
 from medpy.io import load
 import torchio as tio
-
+import numpy as np
+from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
 from .utils import (
@@ -115,3 +116,68 @@ def preprocess(input_tio, img_size=224, intensity=False):
     preprocessed_tio = prep_transform(input_tio)
 
     return preprocessed_tio
+
+
+def per_patient_split(
+    data_list: np.ndarray,
+    test_percentage: float = 0.1,
+    val_percentage: float = 0.1,
+    seed: int = 42,
+):
+    """Performs train/val/test split on the data_list based on the patient
+    ID in the filename. All data from a subject is assigned to the same split,
+    so there is no data leakage between splits. It first separates
+    test_percentage of the subjects for testing, then separates val_percentage
+    of the remaining subjects for validation. The rest are used for training.
+    Args:
+        data_list (np.ndarray): List of dictionaries with keys "image" and
+            "mask" containing the filenames of the images and masks
+        test_percentage (float, optional): Percentage of subjects to use for
+            testing. Defaults to 0.1.
+        val_percentage (float, optional): Percentage of subjects to use for
+            validation. Defaults to 0.1.
+        seed (int, optional): Random seed for reproducibility. Defaults to 42.
+    Returns:
+        train_data (np.ndarray): List of filenames and labels for training
+        val_data (np.ndarray): List of filenames and labels for validation
+        test_data (np.ndarray): List of filenames and labels for testing
+    """
+
+    unique_subjects = np.unique(
+        [
+            os.path.basename(fname_dict["image"]).split("_")[1]
+            for fname_dict in data_list
+        ]
+    )
+
+    train_subjects, test_subjects = train_test_split(
+        unique_subjects, test_size=test_percentage, random_state=seed
+    )
+    train_subjects, val_subjects = train_test_split(
+        train_subjects, test_size=val_percentage, random_state=seed
+    )
+    train_mask = np.array(
+        [
+            os.path.basename(fname_dict["image"]).split("_")[1]
+            in train_subjects
+            for fname_dict in data_list
+        ]
+    )
+    val_mask = np.array(
+        [
+            os.path.basename(fname_dict["image"]).split("_")[1] in val_subjects
+            for fname_dict in data_list
+        ]
+    )
+    test_mask = np.array(
+        [
+            os.path.basename(fname_dict["image"]).split("_")[1]
+            in test_subjects
+            for fname_dict in data_list
+        ]
+    )
+    train_data = data_list[train_mask]
+    val_data = data_list[val_mask]
+    test_data = data_list[test_mask]
+
+    return train_data, val_data, test_data
