@@ -238,31 +238,31 @@ def train_lightning(args):
     )
     files = np.array(files)
 
-    # train_data_partitioned = partition_dataset(
-    #     data=files[train_remaining_indices],
-    #     num_partitions=4,
-    #     shuffle=True,
-    #     even_divisible=False,
-    #     seed=42,
-    # )[int(os.environ["SLURM_PROCID"])]
-
-    # val_data_partitioned = partition_dataset(
-    #     data=files[val_random_indices],
-    #     num_partitions=4,
-    #     shuffle=True,
-    #     even_divisible=False,
-    #     seed=42,
-    # )[int(os.environ["SLURM_PROCID"])]
-
-    train_dataset = Dataset(
+    train_data_partitioned = partition_dataset(
         data=files[train_remaining_indices],
-        transform=transformations,
-        # num_workers=4,
-    )
-    val_dataset = Dataset(
+        num_partitions=4,
+        shuffle=True,
+        even_divisible=False,
+        seed=42,
+    )[int(os.environ["SLURM_PROCID"])]
+
+    val_data_partitioned = partition_dataset(
         data=files[val_random_indices],
+        num_partitions=4,
+        shuffle=True,
+        even_divisible=False,
+        seed=42,
+    )[int(os.environ["SLURM_PROCID"])]
+
+    train_dataset = CacheDataset(
+        data=train_data_partitioned,
         transform=transformations,
-        # num_workers=4,
+        num_workers=4,
+    )
+    val_dataset = CacheDataset(
+        data=val_data_partitioned,
+        transform=transformations,
+        num_workers=4,
     )
 
     train_dataloader = DataLoader(
@@ -321,12 +321,10 @@ def train_lightning(args):
         wandb_logger = pl.loggers.WandbLogger(
             name=args.exp_name,
         )
-    visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
     strategy = pl.strategies.DDPStrategy(
         find_unused_parameters=False, static_graph=True
     )
 
-    print(f"Using {visible_devices} devices for training.")
     torch.set_float32_matmul_precision("medium")
     # strategy = BaguaStrategy(
     #     algorithm="gradient_allreduce",
@@ -364,18 +362,18 @@ def train_lightning(args):
         # output_file=f"{datetime.datetime.now()}.csv",
     )
     tracker.start()
-    # test_data_partitioned = partition_dataset(
-    #     data=files[test_random_indices],
-    #     num_partitions=4,
-    #     seed=42,
-    #     shuffle=False,
-    #     even_divisible=False,
-    # )[int(os.environ["SLURM_PROCID"])]
-    test_dataset = Dataset(
-        files[test_random_indices],
+    test_data_partitioned = partition_dataset(
+        data=files[test_random_indices],
+        num_partitions=4,
+        seed=42,
+        shuffle=False,
+        even_divisible=False,
+    )[int(os.environ["SLURM_PROCID"])]
+    test_dataset = CacheDataset(
+        test_data_partitioned,
         transform=transformations,
-        # num_workers=4,
-        # cache_rate=0.01,
+        num_workers=4,
+        cache_rate=0.01,
     )
     test_loader = DataLoader(
         test_dataset,
