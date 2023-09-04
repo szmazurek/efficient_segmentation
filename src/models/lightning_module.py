@@ -1,10 +1,7 @@
 import lightning.pytorch as pl
-import torch
 from torchmetrics import Dice
-from monai.metrics import DiceMetric
 import segmentation_models_pytorch as smp
 from .torch_models import UNet, AttSqueezeUNet
-import bagua.torch_api as bagua
 from monai.optimizers import Novograd
 
 

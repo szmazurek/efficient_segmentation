@@ -9,7 +9,7 @@
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
 #SBATCH --mem-per-cpu=5GB
 ## Maksymalny czas trwania zlecenia (format HH:MM:SS)
-#SBATCH --time=01:30:00
+#SBATCH --time=00:40:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
 #SBATCH -A plgsano4-gpu-a100
 ## Specyfikacja partycji
@@ -42,6 +42,6 @@ srun -u python  src/main.py \
     --batch_size 32 \
     --model AttSqueezeUnet \
     --loss_function MCCLoss \
-    --exp_name "att-unet-naive-tts" \
+    --exp_name "att-unet-naive-tts-no-cache-test" \
     --wandb
 
