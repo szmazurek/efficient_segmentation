@@ -22,6 +22,7 @@ from monai.data import (
 )
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
+from utils.dataloader_utils import per_patient_split
 
 # import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
 # from lightning.pytorch.callbacks import ModelPruning
@@ -232,20 +233,20 @@ def train_lightning(args):
     # When all the data is preloaded into cache before starting training,
     # the GPU memory exploded, but dunno why - now it works *LOL*.
     random.shuffle(files)
-    file_indices = list(range(len(files)))
-    val_random_indices = random.sample(file_indices, int(len(files) * 0.2))
-    train_remaining_indices = list(set(file_indices) - set(val_random_indices))
-    val_random_indices, test_random_indices = (
-        val_random_indices[: len(val_random_indices) // 2],
-        val_random_indices[len(val_random_indices) // 2 :],
-    )
-    print(
-        f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
-    )
+    # file_indices = list(range(len(files)))
+    # val_random_indices = random.sample(file_indices, int(len(files) * 0.2))
+    # train_remaining_indices = list(set(file_indices) - set(val_random_indices))
+    # val_random_indices, test_random_indices = (
+    #     val_random_indices[: len(val_random_indices) // 2],
+    #     val_random_indices[len(val_random_indices) // 2 :],
+    # )
+    # print(
+    #     f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
+    # )
     files = np.array(files)
-
+    train_files, val_files, test_files = per_patient_split(files)
     train_data_partitioned = partition_dataset(
-        data=files[train_remaining_indices],
+        data=train_files,
         num_partitions=4,
         shuffle=True,
         even_divisible=False,
@@ -253,7 +254,7 @@ def train_lightning(args):
     )[int(os.environ["SLURM_PROCID"])]
 
     val_data_partitioned = partition_dataset(
-        data=files[val_random_indices],
+        data=val_files,
         num_partitions=4,
         shuffle=True,
         even_divisible=False,
@@ -369,7 +370,7 @@ def train_lightning(args):
     )
     tracker.start()
     test_data_partitioned = partition_dataset(
-        data=files[test_random_indices],
+        data=test_files,
         num_partitions=4,
         seed=42,
         shuffle=False,
