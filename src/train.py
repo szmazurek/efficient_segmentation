@@ -25,6 +25,12 @@ from monai.metrics import DiceMetric
 
 # import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
 # from lightning.pytorch.callbacks import ModelPruning
+# warnings.filterwarnings("ignore", module="codecarbon")
+import logging
+
+for name in logging.Logger.manager.loggerDict.keys():
+    if "codecarbon" in name:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
 
 # warnings.filterwarnings("ignore")
 
