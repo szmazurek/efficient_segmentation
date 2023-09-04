@@ -3,7 +3,7 @@ import torch
 from torchmetrics import Dice
 from monai.metrics import DiceMetric
 import segmentation_models_pytorch as smp
-from .torch_models import UNet, AttSqueezeUNet
+from .torch_models import UNet, AttSqueezeUNet, MobileNetV3Seg, MicroNet
 import bagua.torch_api as bagua
 from monai.optimizers import Novograd
 
@@ -29,9 +29,14 @@ class LightningModel(pl.LightningModule):
                 encoder_name="efficientnet-b0",
                 classes=1,
                 in_channels=1,
-                encoder_weights="imagenet",
+                encoder_weights=None,
                 activation="sigmoid",
             )
+        elif model == "MobileNetV3":
+            self.model = MobileNetV3Seg(nclass=1, pretrained_base=False)
+        elif model == "MicroNet":
+            self.model = MicroNet(nb_classes=1, inputs_shape=in_shape[1:])
+
         if loss == "DiceLoss":
             self.loss = smp.losses.DiceLoss(mode="binary", from_logits=False)
         elif loss == "MCCLoss":
