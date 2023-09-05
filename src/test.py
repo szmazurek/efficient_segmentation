@@ -7,7 +7,7 @@ from models.lightning_module import LightningModel
 from glob import glob
 
 from monai import config
-from monai.data import decollate_batch, Dataset, DataLoader
+from monai.data import decollate_batch, DataLoader, Dataset
 from monai.inferers import SliceInferer
 from monai.networks.nets import UNet
 from monai.transforms import (
@@ -145,8 +145,6 @@ def test(args):
 
 
 def test_lightning(args):
-    config.print_config()
-
     test_transforms = Compose(
         [
             LoadImaged(keys=["image"]),
@@ -157,20 +155,6 @@ def test_lightning(args):
                 keys="image", spatial_size=(args.img_size, args.img_size, -1)
             ),
         ]
-    )
-
-    # load data
-    test_images = sorted(
-        glob(os.path.join(args.testing_data_path, "*.nii.gz"))
-    )
-    test_files = [{"image": image_name} for image_name in test_images]
-
-    test_dataset = Dataset(data=test_files, transform=test_transforms)
-    test_dataloader_lightning = DataLoader(
-        test_dataset, batch_size=1, num_workers=0
-    )
-    test_dataloader_torch = DataLoader(
-        test_dataset, batch_size=1, num_workers=0
     )
 
     post_transforms = Compose(
@@ -198,39 +182,27 @@ def test_lightning(args):
             ),
         ]
     )
-    device = torch.device(args.device)
+
+    # load data
+    test_images = sorted(
+        glob(os.path.join(args.testing_data_path, "*.nii.gz"))
+    )
+    test_files = [{"image": image_name} for image_name in test_images]
+
+    test_dataset = Dataset(data=test_files, transform=test_transforms)
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=args.batch_size, num_workers=4
+    )
+
     model = LightningModel.load_from_checkpoint(
         args.model_path,
         in_shape=(None, 1, args.img_size, args.img_size),
         loss=args.loss_function,
         model=args.model,
+        save_dir=args.test_results_save_path,
+        predict_transforms=post_transforms,
     )
-    # visible_devices = len(os.environ["CUDA_VISIBLE_DEVICES"])
-    # strategy = (
-    #     pl.strategies.SingleDeviceStrategy(device=args.device)
-    #     if visible_devices == 1
-    #     else pl.strategies.DDPStrategy(find_unused_parameters=False)
-    # )
-    # trainer = pl.Trainer(
-    #     devices="auto",
-    #     precision="16-mixed",
-    #     strategy=strategy,
-    #     enable_model_summary=False,
-    #     max_epochs=args.epochs,
-    #     log_every_n_steps=1,
-    #     sync_batchnorm=True,
-    # )
-    # trainer.test(model=model, dataloaders=test_dataloader_lightning)
-    inferer = SliceInferer(
-        roi_size=(args.img_size, args.img_size), spatial_dim=2, progress=False
+    trainer = pl.Trainer(
+        devices=1, accelerator="gpu", num_nodes=1, precision="16-mixed"
     )
-
-    with torch.no_grad():
-        model.eval()
-        for i, test_data in enumerate(test_dataloader_torch):
-            test_inputs = test_data["image"].to(device)
-
-            test_data["pred"] = inferer(test_inputs, model)
-            test_data = [
-                post_transforms(i) for i in decollate_batch(test_data)
-            ]
+    trainer.predict(model, test_dataloader)

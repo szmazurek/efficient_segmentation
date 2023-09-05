@@ -12,7 +12,7 @@
 #SBATCH --time=00:05:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
 #SBATCH -A plgsano4-gpu-a100
-## Specyfikacja partycji
+## Specyfikacja partycjii da
 #SBATCH --partition plgrid-gpu-a100
 #SBATCH --gpus=2
 ## Plik ze standardowym wyjściem
@@ -35,12 +35,12 @@ export OMPI_MCA_opal_cuda_support=true
 
 srun -u python  src/main.py \
     --train \
-    --training_data_path data/open_neuro_sliced/ \
+    --training_data_path data/open_neuro_sclied/ \
     --lr 0.001 \
     --num_classes 1 \
     --epochs 150 \
     --batch_size 32 \
-    --model UnetSMP \
+    --model Unet \
     --loss_function MCCLoss \
     --exp_name "att-unet-naive-tts-no-cache-test" \
     --wandb

@@ -243,7 +243,13 @@ def train_lightning(args):
     # print(
     #     f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
     # )
+
     files = np.array(files)
+
+    # train_files = files[train_remaining_indices]
+    # val_files = files[val_random_indices]
+    # test_files = files[test_random_indices]
+
     train_files, val_files, test_files = per_patient_split(files)
     train_data_partitioned = partition_dataset(
         data=train_files,
@@ -298,6 +304,7 @@ def train_lightning(args):
         model=args.model,
         in_shape=(None, 1, args.img_size, args.img_size),
         lr=args.lr,
+        save_results=True,
     )
 
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -403,7 +410,8 @@ def train_lightning(args):
         - energy_training
         - energy_inference
     )
-    if int(os.environ["SLURM_PROCID"]) == 0:
+
+    if args.wandb and int(os.environ["SLURM_PROCID"]) == 0:
         wandb.log(
             {
                 "energy_training_kJ": energy_training,
