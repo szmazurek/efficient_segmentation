@@ -261,43 +261,48 @@ def train_lightning(args):
         seed=42,
     )[int(os.environ["SLURM_PROCID"])]
 
-    train_dataset = CacheDataset(
-        data=train_data_partitioned,
-        transform=transformations,
-        num_workers=4,
-    )
-    val_dataset = CacheDataset(
-        data=val_data_partitioned,
-        transform=transformations,
-        num_workers=4,
-    )
+    # dummy_ds = Dataset(data=train_data_partitioned, transform=transformations)
+    # dummy_loader = DataLoader(dummy_ds, batch_size=args.batch_size)
+    # sample_batch = next(iter(dummy_loader))
 
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True,
-        prefetch_factor=2,
-        drop_last=False,
-        persistent_workers=False,
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        prefetch_factor=2,
-        drop_last=False,
-        persistent_workers=False,
-    )
+    # train_dataset = CacheDataset(
+    #     data=train_data_partitioned,
+    #     transform=transformations,
+    #     num_workers=4,
+    # )
+    # val_dataset = CacheDataset(
+    #     data=val_data_partitioned,
+    #     transform=transformations,
+    #     num_workers=4,
+    # )
+
+    # train_dataloader = DataLoader(
+    #     train_dataset,
+    #     batch_size=args.batch_size,
+    #     shuffle=True,
+    #     num_workers=4,
+    #     pin_memory=True,
+    #     prefetch_factor=2,
+    #     drop_last=False,
+    #     persistent_workers=False,
+    # )
+    # val_loader = DataLoader(
+    #     val_dataset,
+    #     batch_size=args.batch_size,
+    #     shuffle=False,
+    #     num_workers=4,
+    #     pin_memory=True,
+    #     prefetch_factor=2,
+    #     drop_last=False,
+    #     persistent_workers=False,
+    # )
 
     model = LightningModel(
         loss=args.loss_function,
         model=args.model,
         in_shape=(None, 1, args.img_size, args.img_size),
         lr=args.lr,
+        save_results=True,
     )
 
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -360,7 +365,7 @@ def train_lightning(args):
         num_sanity_val_steps=0,
     )
 
-    trainer.fit(model, train_dataloader, val_loader)
+    # trainer.fit(model, train_dataloader, val_loader)
     tracker.stop()
     energy_training = round(tracker._total_energy.kWh * 3600, 3)
     tracker = OfflineEmissionsTracker(
@@ -392,7 +397,10 @@ def train_lightning(args):
         drop_last=False,
         persistent_workers=False,
     )
-    results = trainer.test(model, dataloaders=test_loader, ckpt_path="best")
+    results = trainer.test(
+        model,
+        dataloaders=test_loader,
+    )  # ckpt_path="best")
     tracker.stop()
     energy_inference = round(tracker._total_energy.kWh * 3600, 3)
     training_efficiency_measure = (

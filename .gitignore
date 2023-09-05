@@ -1,5 +1,6 @@
 __pycache__/
 data/test_results/
+data/dummy_results/
 output_files
 wandb_api_key.txt
 *logs/

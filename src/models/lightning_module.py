@@ -1,10 +1,11 @@
 import lightning.pytorch as pl
 from torchmetrics import Dice
 import segmentation_models_pytorch as smp
-
+from monai.data import decollate_batch
 from .torch_models import UNet, AttSqueezeUNet, MobileNetV3Seg, MicroNet
 import bagua.torch_api as bagua
 from monai.optimizers import Novograd
+from monai.transforms import RemoveSmallObjectsd, SaveImaged, Compose
 
 
 class LightningModel(pl.LightningModule):
@@ -16,6 +17,8 @@ class LightningModel(pl.LightningModule):
         init_features=64,
         lr=1e-3,
         in_shape=(None, 1, 256, 256),
+        save_results=False,
+        save_dir="data/dummy_results",
     ):
         super().__init__()
 
@@ -43,6 +46,8 @@ class LightningModel(pl.LightningModule):
 
         self.dice_score = Dice(multiclass=False, average="micro")
         self.lr = lr
+        self.save_results = save_results
+        self.save_dir = save_dir
 
     def forward(self, x):
         return self.model(x)
@@ -127,6 +132,33 @@ class LightningModel(pl.LightningModule):
             logger=True,
             sync_dist=True,
         )
+        if self.save_results:
+            # #### THIS DOES NOT WORK ON OPENNEURO
+            # THIS IS DUE TO SOME PROBLEMS WITH INVERSION OF
+            # AFFINE TRANSFORMS. WILL PROBABLY RUN NO PROBLEM
+            # ON PROPER DATASET
+            # #####
+            batch_copied = batch.copy()
+            batch_copied["pred"] = y_hat
+            TEST_TRANSFORMS_OPEN_NEURO = Compose(
+                [
+                    # RemoveSmallObjectsd(
+                    #     keys="pred", min_size=50, connectivity=1
+                    # ),
+                    SaveImaged(
+                        keys="pred",
+                        meta_keys="pred_meta_dict",
+                        output_dir=self.save_dir,
+                        separate_folder=False,
+                        output_postfix="maskpred",
+                        resample=False,
+                    ),
+                ]
+            )
+            batch_copied = [
+                TEST_TRANSFORMS_OPEN_NEURO(i)
+                for i in decollate_batch(batch_copied)
+            ]
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
