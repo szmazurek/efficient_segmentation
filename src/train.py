@@ -243,7 +243,13 @@ def train_lightning(args):
     # print(
     #     f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
     # )
+
     files = np.array(files)
+
+    # train_files = files[train_remaining_indices]
+    # val_files = files[val_random_indices]
+    # test_files = files[test_random_indices]
+
     train_files, val_files, test_files = per_patient_split(files)
     train_data_partitioned = partition_dataset(
         data=train_files,
@@ -261,41 +267,37 @@ def train_lightning(args):
         seed=42,
     )[int(os.environ["SLURM_PROCID"])]
 
-    # dummy_ds = Dataset(data=train_data_partitioned, transform=transformations)
-    # dummy_loader = DataLoader(dummy_ds, batch_size=args.batch_size)
-    # sample_batch = next(iter(dummy_loader))
+    train_dataset = CacheDataset(
+        data=train_data_partitioned,
+        transform=transformations,
+        num_workers=4,
+    )
+    val_dataset = CacheDataset(
+        data=val_data_partitioned,
+        transform=transformations,
+        num_workers=4,
+    )
 
-    # train_dataset = CacheDataset(
-    #     data=train_data_partitioned,
-    #     transform=transformations,
-    #     num_workers=4,
-    # )
-    # val_dataset = CacheDataset(
-    #     data=val_data_partitioned,
-    #     transform=transformations,
-    #     num_workers=4,
-    # )
-
-    # train_dataloader = DataLoader(
-    #     train_dataset,
-    #     batch_size=args.batch_size,
-    #     shuffle=True,
-    #     num_workers=4,
-    #     pin_memory=True,
-    #     prefetch_factor=2,
-    #     drop_last=False,
-    #     persistent_workers=False,
-    # )
-    # val_loader = DataLoader(
-    #     val_dataset,
-    #     batch_size=args.batch_size,
-    #     shuffle=False,
-    #     num_workers=4,
-    #     pin_memory=True,
-    #     prefetch_factor=2,
-    #     drop_last=False,
-    #     persistent_workers=False,
-    # )
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
+        persistent_workers=False,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        drop_last=False,
+        persistent_workers=False,
+    )
 
     model = LightningModel(
         loss=args.loss_function,
@@ -365,7 +367,7 @@ def train_lightning(args):
         num_sanity_val_steps=0,
     )
 
-    # trainer.fit(model, train_dataloader, val_loader)
+    trainer.fit(model, train_dataloader, val_loader)
     tracker.stop()
     energy_training = round(tracker._total_energy.kWh * 3600, 3)
     tracker = OfflineEmissionsTracker(
@@ -397,10 +399,7 @@ def train_lightning(args):
         drop_last=False,
         persistent_workers=False,
     )
-    results = trainer.test(
-        model,
-        dataloaders=test_loader,
-    )  # ckpt_path="best")
+    results = trainer.test(model, dataloaders=test_loader, ckpt_path="best")
     tracker.stop()
     energy_inference = round(tracker._total_energy.kWh * 3600, 3)
     training_efficiency_measure = (
@@ -411,7 +410,8 @@ def train_lightning(args):
         - energy_training
         - energy_inference
     )
-    if int(os.environ["SLURM_PROCID"]) == 0:
+
+    if args.wandb and int(os.environ["SLURM_PROCID"]) == 0:
         wandb.log(
             {
                 "energy_training_kJ": energy_training,

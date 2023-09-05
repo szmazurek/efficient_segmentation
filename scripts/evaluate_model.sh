@@ -7,11 +7,11 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
-#SBATCH --mem-per-cpu=15GB
+#SBATCH --mem-per-cpu=5GB
 ## Maksymalny czas trwania zlecenia (format HH:MM:SS)
-#SBATCH --time=00:10:00
+#SBATCH --time=00:05:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
-#SBATCH -A plgsanoathena-gpu-a100
+#SBATCH -A plgsano4-gpu-a100
 ## Specyfikacja partycji
 #SBATCH --partition plgrid-gpu-a100
 #SBATCH --gpus-per-task=1
@@ -23,10 +23,11 @@ ml CUDA/11.7
 # conda activate $SCRATCH/energy_efficient_ai/energy_efficient_env
 conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
 cd $SCRATCH/energy_efficient_ai/efficient_segmentation
-srun python src/main.py \
+srun -u python src/main.py \
     --test \
     --testing_data_path data/testing_data \
-    --model_path "lightning_logs/version_17/checkpoints/epoch=95-step=384.ckpt" \
-    --test_results_save_path data/test_results \
-    --model Unet \
+    --model_path "lightning_logs/0i7rfdqk/checkpoints/epoch=6-step=28.ckpt" \
+    --test_results_save_path data/dummy_results \
+    --model AttSqueezeUnet \
+    --batch_size 1 \
     --loss_function MCCLoss

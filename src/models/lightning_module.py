@@ -3,9 +3,9 @@ from torchmetrics import Dice
 import segmentation_models_pytorch as smp
 from monai.data import decollate_batch
 from .torch_models import UNet, AttSqueezeUNet, MobileNetV3Seg, MicroNet
-import bagua.torch_api as bagua
 from monai.optimizers import Novograd
-from monai.transforms import RemoveSmallObjectsd, SaveImaged, Compose
+from monai.transforms import Compose
+from monai.inferers import SliceInferer
 
 
 class LightningModel(pl.LightningModule):
@@ -17,7 +17,7 @@ class LightningModel(pl.LightningModule):
         init_features=64,
         lr=1e-3,
         in_shape=(None, 1, 256, 256),
-        save_results=False,
+        predict_transforms: Compose = None,
         save_dir="data/dummy_results",
     ):
         super().__init__()
@@ -45,8 +45,9 @@ class LightningModel(pl.LightningModule):
             self.loss = smp.losses.MCCLoss()
 
         self.dice_score = Dice(multiclass=False, average="micro")
+        self.in_shape = in_shape
         self.lr = lr
-        self.save_results = save_results
+        self.predict_transforms = predict_transforms
         self.save_dir = save_dir
 
     def forward(self, x):
@@ -132,38 +133,26 @@ class LightningModel(pl.LightningModule):
             logger=True,
             sync_dist=True,
         )
-        if self.save_results:
-            # #### THIS DOES NOT WORK ON OPENNEURO
-            # THIS IS DUE TO SOME PROBLEMS WITH INVERSION OF
-            # AFFINE TRANSFORMS. WILL PROBABLY RUN NO PROBLEM
-            # ON PROPER DATASET
-            # #####
-            batch_copied = batch.copy()
-            batch_copied["pred"] = y_hat
-            TEST_TRANSFORMS_OPEN_NEURO = Compose(
-                [
-                    # RemoveSmallObjectsd(
-                    #     keys="pred", min_size=50, connectivity=1
-                    # ),
-                    SaveImaged(
-                        keys="pred",
-                        meta_keys="pred_meta_dict",
-                        output_dir=self.save_dir,
-                        separate_folder=False,
-                        output_postfix="maskpred",
-                        resample=False,
-                    ),
-                ]
-            )
-            batch_copied = [
-                TEST_TRANSFORMS_OPEN_NEURO(i)
-                for i in decollate_batch(batch_copied)
-            ]
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         x = batch["image"]
-        y_hat = self(x)
+        inferer = SliceInferer(
+            roi_size=(self.in_shape[2], self.in_shape[3]),
+            spatial_dim=2,
+            progress=False,
+        )
+        y_hat = inferer(x, self.model)
+        # #### THIS DOES NOT WORK ON OPENNEURO
+        # THIS IS DUE TO SOME PROBLEMS WITH INVERSION OF
+        # AFFINE TRANSFORMS. THIS VERSION RUNS ON 3D VOLUMES ONLY FROM
+        # THE DATASET PROVIDED BY THE CHALLENGE.
+        # #####
+        batch_copied = batch.copy()
+        batch_copied["pred"] = y_hat
+        batch_copied = [
+            self.predict_transforms(i) for i in decollate_batch(batch_copied)
+        ]
         return y_hat
 
     def configure_optimizers(self):

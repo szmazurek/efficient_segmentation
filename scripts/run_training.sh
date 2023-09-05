@@ -35,12 +35,12 @@ export OMPI_MCA_opal_cuda_support=true
 
 srun -u python  src/main.py \
     --train \
-    --training_data_path data/training_data/ \
+    --training_data_path data/open_neuro_sclied/ \
     --lr 0.001 \
     --num_classes 1 \
-    --epochs 1 \
+    --epochs 150 \
     --batch_size 32 \
-    --model UnetSMP \
+    --model Unet \
     --loss_function MCCLoss \
     --exp_name "att-unet-naive-tts-no-cache-test" \
     --wandb
