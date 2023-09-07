@@ -10,8 +10,9 @@ import torch
 import wandb
 import numpy as np
 from codecarbon import OfflineEmissionsTracker
+import time
 
-# from lightning_bagua import BaguaStrategy
+from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
 from monai.data import (
     DataLoader,
@@ -36,6 +37,7 @@ for name in logging.Logger.manager.loggerDict.keys():
 # warnings.filterwarnings("ignore")
 
 pl.seed_everything(42)
+N_PROC = int(os.environ["SLURM_NTASKS"])
 
 
 def train(args):
@@ -224,6 +226,8 @@ def train_lightning(args):
                 keys=["image", "label"],
                 spatial_size=(args.img_size, args.img_size),
             ),
+            # tr.RandFlipd(keys=["image", "label"], prob=0.3),
+            # tr.RandRotated(keys=["image", "label"], range_x=90),
         ]
     )
 
@@ -249,11 +253,10 @@ def train_lightning(args):
     # train_files = files[train_remaining_indices]
     # val_files = files[val_random_indices]
     # test_files = files[test_random_indices]
-
     train_files, val_files, test_files = per_patient_split(files)
     train_data_partitioned = partition_dataset(
         data=train_files,
-        num_partitions=4,
+        num_partitions=N_PROC,
         shuffle=True,
         even_divisible=False,
         seed=42,
@@ -261,7 +264,7 @@ def train_lightning(args):
 
     val_data_partitioned = partition_dataset(
         data=val_files,
-        num_partitions=4,
+        num_partitions=N_PROC,
         shuffle=True,
         even_divisible=False,
         seed=42,
@@ -270,21 +273,21 @@ def train_lightning(args):
     train_dataset = CacheDataset(
         data=train_data_partitioned,
         transform=transformations,
-        num_workers=4,
+        num_workers=8,
     )
     val_dataset = CacheDataset(
         data=val_data_partitioned,
         transform=transformations,
-        num_workers=4,
+        num_workers=8,
     )
 
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=args.n_workers,
         pin_memory=True,
-        prefetch_factor=2,
+        prefetch_factor=4,
         drop_last=False,
         persistent_workers=False,
     )
@@ -292,9 +295,9 @@ def train_lightning(args):
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=args.n_workers,
         pin_memory=True,
-        prefetch_factor=2,
+        prefetch_factor=4,
         drop_last=False,
         persistent_workers=False,
     )
@@ -304,7 +307,6 @@ def train_lightning(args):
         model=args.model,
         in_shape=(None, 1, args.img_size, args.img_size),
         lr=args.lr,
-        save_results=True,
     )
 
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -329,7 +331,7 @@ def train_lightning(args):
             wandb.init(
                 entity="mazurek",
                 project="E2MIP_Challenge_FetalBrainSegmentation",
-                group="pruning",
+                group="main-experiemtns",
                 name=args.exp_name,
             )
         wandb_logger = pl.loggers.WandbLogger(
@@ -341,7 +343,7 @@ def train_lightning(args):
 
     torch.set_float32_matmul_precision("medium")
     # strategy = BaguaStrategy(
-    #     algorithm="gradient_allreduce",
+    #     algorithm="bytegrad",
     # )
     # state = powerSGD.PowerSGDState(
     #     process_group=None,
@@ -361,13 +363,14 @@ def train_lightning(args):
         callbacks=[
             model_checkpoint_callback,
             early_stopping_callback,
-            # lr_finder_callback,
+            lr_finder_callback,
         ],
         log_every_n_steps=1,
         num_sanity_val_steps=0,
     )
 
     trainer.fit(model, train_dataloader, val_loader)
+
     tracker.stop()
     energy_training = round(tracker._total_energy.kWh * 3600, 3)
     tracker = OfflineEmissionsTracker(
@@ -386,16 +389,16 @@ def train_lightning(args):
     test_dataset = CacheDataset(
         test_data_partitioned,
         transform=transformations,
-        num_workers=4,
+        num_workers=args.n_workers,
         cache_rate=0.01,
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=args.n_workers,
         pin_memory=True,
-        prefetch_factor=2,
+        prefetch_factor=6,
         drop_last=False,
         persistent_workers=False,
     )

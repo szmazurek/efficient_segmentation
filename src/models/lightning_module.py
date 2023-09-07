@@ -1,3 +1,4 @@
+import torch
 import lightning.pytorch as pl
 from torchmetrics import Dice
 import segmentation_models_pytorch as smp
@@ -43,6 +44,8 @@ class LightningModel(pl.LightningModule):
             self.loss = smp.losses.DiceLoss(mode="binary", from_logits=False)
         elif loss == "MCCLoss":
             self.loss = smp.losses.MCCLoss()
+        elif loss == "BCE":
+            self.loss = torch.nn.BCELoss()
 
         self.dice_score = Dice(multiclass=False, average="micro")
         self.in_shape = in_shape
