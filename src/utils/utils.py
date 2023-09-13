@@ -1,58 +1,92 @@
-import os
-import torch
-import torch.nn as nn
+from torch.nn.functional import binary_cross_entropy_with_logits
+from segmentation_models_pytorch.losses import DiceLoss, MCCLoss
+from models.torch_models import (
+    UNet,
+    AttSqueezeUNet,
+    MobileNetV3Seg,
+    MicroNet,
+    SegNet,
+    SQNet,
+    LinkNet,
+    FSSNet,
+    FPENet,
+    ESPNet,
+    ESNet,
+    ERFNet,
+    ENet,
+    EDANet,
+    DABNet,
+    ContextNet,
+    CGNet,
+)
+from models.ESPNet_v2.seg_model import EESPNet_Seg
+
+AVAILABLE_MODELS = [
+    "Unet",
+    "AttSqueezeUnet",
+    "MobileNetV3",
+    "MicroNet",
+    "SegNet",
+    "SQNet",
+    "LinkNet",
+    "FSSNet",
+    "FPENet",
+    "ESPNet",
+    "ESNet",
+    "ERFNet",
+    "ENet",
+    "EDANet",
+    "DABNet",
+    "ContextNet",
+    "CGNet",
+    "ESPNetv2",
+]
+AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss", "BCE"]
 
 
-class DiceLoss(nn.Module):
-    def __init__(self, n_classes, batch=False, focal=False):
-        super(DiceLoss, self).__init__()
-        self.n_classes = n_classes
-        self.batch = batch
-
-    def _one_hot_encoder(self, input_tensor):
-        tensor_list = []
-        for i in range(self.n_classes):
-            temp_prob = input_tensor == i  # * torch.ones_like(input_tensor)
-            tensor_list.append(temp_prob.unsqueeze(1))
-        output_tensor = torch.cat(tensor_list, dim=1)
-        return output_tensor.float()
-
-    def _dice_loss(self, score, target):
-        target = target.float()
-        smooth = 1e-5
-        dims = (0, 1, 2) if self.batch else (1, 2)
-
-        intersect = torch.sum(score * target, dims)
-        y_sum = torch.sum(target * target, dims)
-        z_sum = torch.sum(score * score, dims)
-        dice_score = (2 * intersect + smooth) / (z_sum + y_sum + smooth)
-        loss = 1.0 - dice_score if self.batch else torch.mean(1.0 - dice_score)
-        return loss
-
-    def forward(self, inputs, target, weight=None, softmax=False):
-        if softmax:
-            inputs = torch.softmax(inputs, dim=1)
-        target = self._one_hot_encoder(target)
-        if weight is None:
-            weight = [1] * self.n_classes
-        assert inputs.size() == target.size(), \
-            'predict {} & target {} shape do not match'.format(inputs.size(), target.size())
-        class_wise_dice = []
-        loss = 0.0
-        for i in range(0, self.n_classes):
-            dice = self._dice_loss(inputs[:, i], target[:, i])
-            class_wise_dice.append(1.0 - dice.item())
-            loss += dice * weight[i]
-        return loss / self.n_classes
+def return_chosen_model(model_name, in_channels, in_shape, init_features):
+    if model_name == "Unet":
+        return UNet(in_channels, in_channels, init_features)
+    elif model_name == "AttSqueezeUnet":
+        return AttSqueezeUNet(1, in_shape)
+    elif model_name == "MobileNetV3":
+        return MobileNetV3Seg(nclass=1, pretrained_base=False)
+    elif model_name == "MicroNet":
+        return MicroNet(nb_classes=1, inputs_shape=in_shape[1:])
+    elif model_name == "SegNet":
+        return SegNet(classes=in_channels)
+    elif model_name == "SQNet":
+        return SQNet(classes=in_channels)
+    elif model_name == "LinkNet":
+        return LinkNet(classes=in_channels)
+    elif model_name == "FSSNet":
+        return FSSNet(classes=in_channels)
+    elif model_name == "FPENet":
+        return FPENet(classes=in_channels)
+    elif model_name == "ESPNet":
+        return ESPNet(classes=in_channels)
+    elif model_name == "ESNet":
+        return ESNet(classes=in_channels)
+    elif model_name == "ERFNet":
+        return ERFNet(classes=in_channels)
+    elif model_name == "ENet":
+        return ENet(classes=in_channels)
+    elif model_name == "EDANet":
+        return EDANet(classes=in_channels)
+    elif model_name == "DABNet":
+        return DABNet(classes=in_channels)
+    elif model_name == "ContextNet":
+        return ContextNet(classes=in_channels)
+    elif model_name == "CGNet":
+        return CGNet(classes=in_channels)
+    elif model_name == "ESPNetv2":
+        return EESPNet_Seg(classes=in_channels)
 
 
-def verify_segmentation_dataset(images_list, masks_list):
-    assert len(images_list) == len(masks_list), \
-        "Found error during data loading: number of images and number of masks do not match"
-
-    for item in range(len(images_list)):
-        name = os.path.basename(images_list[item])
-        mask_name = os.path.join(os.path.dirname(masks_list[item]), 'mask' + name[3:])
-
-        assert mask_name in masks_list, \
-            "Found error during data loading: No mask was found for\n{0}".format(str(name))
+def return_chosen_loss(loss_name):
+    if loss_name == "DiceLoss":
+        return DiceLoss(mode="binary", from_logits=False)
+    elif loss_name == "MCCLoss":
+        return MCCLoss()
+    elif loss_name == "BCE":
+        return binary_cross_entropy_with_logits

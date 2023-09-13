@@ -1,15 +1,8 @@
 from train import train_lightning
 from test import test_lightning
 import argparse
+from utils.utils import AVAILABLE_LOSSES, AVAILABLE_MODELS
 
-AVAILABLE_MODELS = [
-    "Unet",
-    "AttSqueezeUnet",
-    "UnetSMP",
-    "MobileNetV3",
-    "MicroNet",
-]
-AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss", "BCE"]
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int)
 parser.add_argument("--batch_size", default=16, type=int)

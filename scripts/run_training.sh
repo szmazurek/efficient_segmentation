@@ -31,7 +31,7 @@ conda activate /net/tscratch/people/plgmazurekagh/conda_envs/lightning_bagua_env
 cd $SCRATCH/energy_efficient_ai/efficient_segmentation
 export WANDB_API_KEY=$(cat "wandb_api_key.txt")
 export OMPI_MCA_opal_cuda_support=true
-export NCCL_DEBUG=WARN
+export NCCL_DEBUG=INFO
 
 srun -u python  src/main.py \
     --train \
@@ -40,10 +40,10 @@ srun -u python  src/main.py \
     --num_classes 1 \
     --epochs 200 \
     --img_size 256 \
-    --batch_size 128 \
+    --batch_size 256 \
     --model MobileNetV3 \
     --loss_function DiceLoss \
-    --exp_name "mobilenet-6-workers-proper-data" \
+    --exp_name "mobilenet-nccl-debug" \
     --n_workers 6 \
     --wandb
 
