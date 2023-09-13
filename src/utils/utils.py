@@ -1,25 +1,26 @@
-from torch.nn.functional import binary_cross_entropy_with_logits
-from segmentation_models_pytorch.losses import DiceLoss, MCCLoss
+import os
+from models.ESPNet_v2.seg_model import EESPNet_Seg
 from models.torch_models import (
-    UNet,
     AttSqueezeUNet,
-    MobileNetV3Seg,
+    CGNet,
+    ContextNet,
+    DABNet,
+    EDANet,
+    ENet,
+    ERFNet,
+    ESNet,
+    ESPNet,
+    FPENet,
+    FSSNet,
+    LinkNet,
     MicroNet,
+    MobileNetV3Seg,
     SegNet,
     SQNet,
-    LinkNet,
-    FSSNet,
-    FPENet,
-    ESPNet,
-    ESNet,
-    ERFNet,
-    ENet,
-    EDANet,
-    DABNet,
-    ContextNet,
-    CGNet,
+    UNet,
 )
-from models.ESPNet_v2.seg_model import EESPNet_Seg
+from segmentation_models_pytorch.losses import DiceLoss, MCCLoss
+from torch.nn.functional import binary_cross_entropy_with_logits
 
 AVAILABLE_MODELS = [
     "Unet",
@@ -90,3 +91,21 @@ def return_chosen_loss(loss_name):
         return MCCLoss()
     elif loss_name == "BCE":
         return binary_cross_entropy_with_logits
+
+
+def verify_segmentation_dataset(images_list, masks_list):
+    assert len(images_list) == len(
+        masks_list
+    ), "Found error during data loading: number of images and number of masks do not match"
+
+    for item in range(len(images_list)):
+        name = os.path.basename(images_list[item])
+        mask_name = os.path.join(
+            os.path.dirname(masks_list[item]), "mask" + name[3:]
+        )
+
+        assert (
+            mask_name in masks_list
+        ), "Found error during data loading: No mask was found for\n{0}".format(
+            str(name)
+        )

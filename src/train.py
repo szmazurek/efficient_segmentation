@@ -279,13 +279,13 @@ def train_lightning(args):
         data=train_data_partitioned,
         transform=transformations,
         num_workers=12,
-        cache_rate=0.01,
+        # cache_rate=0.01,
     )
     val_dataset = CacheDataset(
         data=val_data_partitioned,
         transform=transformations_val_test,
         num_workers=12,
-        cache_rate=0.01,
+        # cache_rate=0.01,
     )
 
     test_dataset = CacheDataset(

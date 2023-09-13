@@ -1,12 +1,11 @@
 import torch
 import lightning.pytorch as pl
 from torchmetrics import Dice
-import segmentation_models_pytorch as smp
 from monai.data import decollate_batch
-from .torch_models import UNet, AttSqueezeUNet, MobileNetV3Seg, MicroNet
 from monai.optimizers import Novograd
 from monai.transforms import Compose
 from monai.inferers import SliceInferer
+from utils.utils import return_chosen_model, return_chosen_loss
 
 
 class LightningModel(pl.LightningModule):
@@ -23,29 +22,10 @@ class LightningModel(pl.LightningModule):
     ):
         super().__init__()
 
-        if model == "Unet":
-            self.model = UNet(in_channels, in_channels, init_features)
-        elif model == "AttSqueezeUnet":
-            self.model = AttSqueezeUNet(1, in_shape)
-        elif model == "UnetSMP":
-            self.model = smp.MAnet(
-                encoder_name="efficientnet-b0",
-                classes=1,
-                in_channels=1,
-                encoder_weights=None,
-                activation="sigmoid",
-            )
-        elif model == "MobileNetV3":
-            self.model = MobileNetV3Seg(nclass=1, pretrained_base=False)
-        elif model == "MicroNet":
-            self.model = MicroNet(nb_classes=1, inputs_shape=in_shape[1:])
-
-        if loss == "DiceLoss":
-            self.loss = smp.losses.DiceLoss(mode="binary", from_logits=False)
-        elif loss == "MCCLoss":
-            self.loss = smp.losses.MCCLoss()
-        elif loss == "BCE":
-            self.loss = torch.nn.functional.binary_cross_entropy_with_logits
+        self.model = return_chosen_model(
+            model, in_channels, in_shape, init_features
+        )
+        self.loss = return_chosen_loss(loss)
 
         self.dice_score = Dice(multiclass=False, average="micro")
         self.in_shape = in_shape
