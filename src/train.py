@@ -10,9 +10,7 @@ import torch
 import wandb
 import numpy as np
 from codecarbon import OfflineEmissionsTracker
-import time
 
-from lightning_bagua import BaguaStrategy
 from models.lightning_module import LightningModel
 from monai.data import (
     DataLoader,
@@ -192,12 +190,6 @@ def train(args):
 
 
 def train_lightning(args):
-    tracker = OfflineEmissionsTracker(
-        country_iso_code="POL",
-        # output_dir="output_files/codecarbon",
-        # output_file=f"{datetime.datetime.now()}.csv",
-    )
-    tracker.start()
     images = sorted(
         glob(os.path.join(args.training_data_path, "images/*.nii.gz"))
     )
@@ -226,8 +218,26 @@ def train_lightning(args):
                 keys=["image", "label"],
                 spatial_size=(args.img_size, args.img_size),
             ),
-            # tr.RandFlipd(keys=["image", "label"], prob=0.3),
-            # tr.RandRotated(keys=["image", "label"], range_x=90),
+            tr.RandFlipd(keys=["image", "label"], prob=0.3),
+            tr.RandRotated(keys=["image", "label"], range_x=90),
+        ]
+    )
+
+    transformations_val_test = tr.Compose(
+        [
+            tr.LoadImaged(keys=["image", "label"]),
+            tr.EnsureChannelFirstd(keys=["image", "label"]),
+            tr.Spacingd(
+                keys=["image", "label"],
+                pixdim=(1.0, 1.0, -1.0),
+                mode=("bilinear", "nearest"),
+            ),
+            tr.SqueezeDimd(keys=["image", "label"], dim=-1, update_meta=True),
+            tr.NormalizeIntensityd(keys=["image"], nonzero=True),
+            tr.ResizeWithPadOrCropd(
+                keys=["image", "label"],
+                spatial_size=(args.img_size, args.img_size),
+            ),
         ]
     )
 
@@ -237,23 +247,10 @@ def train_lightning(args):
     # When all the data is preloaded into cache before starting training,
     # the GPU memory exploded, but dunno why - now it works *LOL*.
     random.shuffle(files)
-    # file_indices = list(range(len(files)))
-    # val_random_indices = random.sample(file_indices, int(len(files) * 0.2))
-    # train_remaining_indices = list(set(file_indices) - set(val_random_indices))
-    # val_random_indices, test_random_indices = (
-    #     val_random_indices[: len(val_random_indices) // 2],
-    #     val_random_indices[len(val_random_indices) // 2 :],
-    # )
-    # print(
-    #     f"Train size: {len(train_remaining_indices)}, Val size: {len(val_random_indices)}, Test size: {len(test_random_indices)}"
-    # )
-
     files = np.array(files)
 
-    # train_files = files[train_remaining_indices]
-    # val_files = files[val_random_indices]
-    # test_files = files[test_random_indices]
     train_files, val_files, test_files = per_patient_split(files)
+
     train_data_partitioned = partition_dataset(
         data=train_files,
         num_partitions=N_PROC,
@@ -270,24 +267,40 @@ def train_lightning(args):
         seed=42,
     )[int(os.environ["SLURM_PROCID"])]
 
+    test_data_partitioned = partition_dataset(
+        data=test_files,
+        num_partitions=4,
+        seed=42,
+        shuffle=False,
+        even_divisible=False,
+    )[int(os.environ["SLURM_PROCID"])]
+
     train_dataset = CacheDataset(
         data=train_data_partitioned,
         transform=transformations,
-        num_workers=8,
+        num_workers=12,
+        # cache_rate=0.01,
     )
     val_dataset = CacheDataset(
         data=val_data_partitioned,
-        transform=transformations,
-        num_workers=8,
+        transform=transformations_val_test,
+        num_workers=12,
+        # cache_rate=0.01,
     )
 
+    test_dataset = CacheDataset(
+        test_data_partitioned,
+        transform=transformations_val_test,
+        num_workers=args.n_workers,
+        cache_rate=0.01,
+    )
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.n_workers,
         pin_memory=True,
-        prefetch_factor=4,
+        prefetch_factor=2,
         drop_last=False,
         persistent_workers=False,
     )
@@ -297,10 +310,33 @@ def train_lightning(args):
         shuffle=False,
         num_workers=args.n_workers,
         pin_memory=True,
-        prefetch_factor=4,
+        prefetch_factor=2,
         drop_last=False,
         persistent_workers=False,
     )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.n_workers,
+        pin_memory=True,
+        prefetch_factor=6,
+        drop_last=False,
+        persistent_workers=False,
+    )
+
+    if args.wandb:
+        if int(os.environ["SLURM_PROCID"]) == 0:
+            wandb.init(
+                entity="mazurek",
+                project="E2MIP_Challenge_FetalBrainSegmentation",
+                group="best-models",
+                name=args.exp_name,
+            )
+        wandb_logger = pl.loggers.WandbLogger(
+            name=args.exp_name,
+        )
 
     model = LightningModel(
         loss=args.loss_function,
@@ -308,7 +344,6 @@ def train_lightning(args):
         in_shape=(None, 1, args.img_size, args.img_size),
         lr=args.lr,
     )
-
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
         save_top_k=1, mode="min", monitor="val_loss"
     )
@@ -321,27 +356,18 @@ def train_lightning(args):
     )
 
     lr_finder_callback = pl.callbacks.LearningRateFinder(
-        min_lr=1e-6,
+        min_lr=1e-5,
         max_lr=1e-1,
         num_training_steps=100,
     )
 
-    if args.wandb:
-        if int(os.environ["SLURM_PROCID"]) == 0:
-            wandb.init(
-                entity="mazurek",
-                project="E2MIP_Challenge_FetalBrainSegmentation",
-                group="main-experiemtns",
-                name=args.exp_name,
-            )
-        wandb_logger = pl.loggers.WandbLogger(
-            name=args.exp_name,
-        )
     strategy = pl.strategies.DDPStrategy(
-        find_unused_parameters=False, static_graph=True
+        find_unused_parameters=False,
+        static_graph=True,
     )
 
     torch.set_float32_matmul_precision("medium")
+
     # strategy = BaguaStrategy(
     #     algorithm="bytegrad",
     # )
@@ -353,7 +379,7 @@ def train_lightning(args):
     # model.register_comm_hook(state, PowerSGD.powerSGD_hook)
     trainer = pl.Trainer(
         devices="auto",
-        accelerator="gpu",
+        accelerator="auto",
         precision="16-mixed",
         strategy=strategy,
         num_nodes=1,
@@ -367,8 +393,15 @@ def train_lightning(args):
         ],
         log_every_n_steps=1,
         num_sanity_val_steps=0,
+        # gradient_clip_val=1.0,
+        # gradient_clip_algorithm="value",
     )
-
+    tracker = OfflineEmissionsTracker(
+        country_iso_code="POL",
+        # output_dir="output_files/codecarbon",
+        # output_file=f"{datetime.datetime.now()}.csv",
+    )
+    tracker.start()
     trainer.fit(model, train_dataloader, val_loader)
 
     tracker.stop()
@@ -379,29 +412,7 @@ def train_lightning(args):
         # output_file=f"{datetime.datetime.now()}.csv",
     )
     tracker.start()
-    test_data_partitioned = partition_dataset(
-        data=test_files,
-        num_partitions=4,
-        seed=42,
-        shuffle=False,
-        even_divisible=False,
-    )[int(os.environ["SLURM_PROCID"])]
-    test_dataset = CacheDataset(
-        test_data_partitioned,
-        transform=transformations,
-        num_workers=args.n_workers,
-        cache_rate=0.01,
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.n_workers,
-        pin_memory=True,
-        prefetch_factor=6,
-        drop_last=False,
-        persistent_workers=False,
-    )
+
     results = trainer.test(model, dataloaders=test_loader, ckpt_path="best")
     tracker.stop()
     energy_inference = round(tracker._total_energy.kWh * 3600, 3)

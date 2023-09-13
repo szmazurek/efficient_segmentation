@@ -5,7 +5,6 @@ import torchio as tio
 import numpy as np
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
-
 from .utils import (
     verify_segmentation_dataset,
 )
@@ -156,6 +155,7 @@ def per_patient_split(
     train_subjects, val_subjects = train_test_split(
         train_subjects, test_size=val_percentage, random_state=seed
     )
+
     train_mask = np.array(
         [
             os.path.basename(fname_dict["image"]).split("_")[1]

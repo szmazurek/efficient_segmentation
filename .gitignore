@@ -8,3 +8,5 @@ lightning-Bagua/
 bagua/
 wandb/
 open_neuro*/
+*.ckpt
+*.csv

@@ -45,7 +45,7 @@ class LightningModel(pl.LightningModule):
         elif loss == "MCCLoss":
             self.loss = smp.losses.MCCLoss()
         elif loss == "BCE":
-            self.loss = torch.nn.BCELoss()
+            self.loss = torch.nn.functional.binary_cross_entropy_with_logits
 
         self.dice_score = Dice(multiclass=False, average="micro")
         self.in_shape = in_shape
@@ -58,11 +58,10 @@ class LightningModel(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch["image"], batch["label"]
-        y = y.int()
-        y_hat = self(x)
 
-        loss = self.loss(y_hat, y)
-        dice_score = self.dice_score(y_hat, y)
+        y_hat = self(x)
+        loss = self.loss(y_hat.float(), y.float())
+        dice_score = self.dice_score(y_hat, y.int())
         self.log(
             "dice_score",
             dice_score,
@@ -86,12 +85,11 @@ class LightningModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch["image"], batch["label"]
-        y = y.int()
+
         y_hat = self(x)
 
-        loss = self.loss(y_hat, y)
-
-        dice_score = self.dice_score(y_hat, y)
+        loss = self.loss(y_hat.float(), y.float())
+        dice_score = self.dice_score(y_hat, y.int())
         self.log(
             "val_dice_score",
             dice_score,
@@ -114,10 +112,10 @@ class LightningModel(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = batch["image"], batch["label"]
-        y = y.int()
+
         y_hat = self(x)
-        loss = self.loss(y_hat, y)
-        dice_score = self.dice_score(y_hat, y)
+        loss = self.loss(y_hat.float(), y.float())
+        dice_score = self.dice_score(y_hat, y.int())
         self.log(
             "test_dice_score",
             dice_score,
@@ -163,6 +161,21 @@ class LightningModel(pl.LightningModule):
             self.parameters(),
             lr=self.lr,
             amsgrad=True,
+            # weight_decay=0.001,
+        )
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=0.1,
+            patience=5,
+            verbose=True,
+            threshold=0.001,
         )
 
-        return optimizer
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss",
+            },
+        }
