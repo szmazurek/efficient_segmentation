@@ -9,7 +9,7 @@ AVAILABLE_MODELS = [
     "MobileNetV3",
     "MicroNet",
 ]
-AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss"]
+AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss", "BCE"]
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int)
 parser.add_argument("--batch_size", default=16, type=int)
@@ -78,6 +78,9 @@ parser.add_argument(
     type=str,
     default="my_run",
     help="Experiment name for logging to wandb",
+)
+parser.add_argument(
+    "--n_workers", type=int, default=4, help="Number of workers"
 )
 args = parser.parse_args()
 
