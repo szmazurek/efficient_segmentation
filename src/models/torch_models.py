@@ -969,7 +969,7 @@ class MicroNet(nn.Module):
         freq=4,
         squeeze_ratio=0.25,
         pct_3x3=0.5,
-        inputs_shape=(3, 224, 224),
+        inputs_shape=(1, 224, 224),
         use_bias=False,
         data_format="channels_first",
         activation=nn.ReLU(),
@@ -1255,7 +1255,7 @@ class MicroNet(nn.Module):
 
         # Classifier
         out_conv = self.out_conv(d_conv3)
-        return F.softmax(out_conv, dim=1)
+        return F.sigmoid(out_conv)
 
     def create_fire_modules(
         self,
@@ -2890,9 +2890,12 @@ class DilatedParllelResidualBlockB(nn.Module):
         """
         super().__init__()
         n = int(nOut / 5)  # K=5,
+        n = 1
         n1 = (
             nOut - 4 * n
         )  # (N-(K-1)INT(N/K)) for dilation rate of 2^0, for producing an output feature map of channel=nOut
+        # print(n,n1,nOut)
+        n1 = 1
         self.c1 = C(
             nIn, n, 1, 1
         )  # the point-wise convolutions with 1x1 help in reducing the computation, channel=c
@@ -2987,9 +2990,9 @@ class ESPNet_Encoder(nn.Module):
             2
         )  # down-sample for input reinforcement, factor=4
 
-        self.b1 = BR(16 + 3)
+        self.b1 = BR(16 + 1)
         self.level2_0 = DownSamplerB(
-            16 + 3, 64
+            16 + 1, 64
         )  # Downsample Block, feature map size divided 2,    1/4
 
         self.level2 = nn.ModuleList()
@@ -2997,10 +3000,10 @@ class ESPNet_Encoder(nn.Module):
             self.level2.append(
                 DilatedParllelResidualBlockB(64, 64)
             )  # ESP block
-        self.b2 = BR(128 + 3)
+        self.b2 = BR(128 + 1)
 
         self.level3_0 = DownSamplerB(
-            128 + 3, 128
+            128 + 1, 128
         )  # Downsample Block, feature map size divided 2,   1/8
         self.level3 = nn.ModuleList()
         for i in range(0, q):
@@ -3073,7 +3076,7 @@ class ESPNet(nn.Module):
             self.en_modules.append(m)
 
         # light-weight decoder
-        self.level3_C = C(128 + 3, classes, 1, 1)
+        self.level3_C = C(128 + 1, classes, 1, 1)
         self.br = nn.BatchNorm2d(classes, eps=1e-03)
         self.conv = CBR(19 + classes, classes, 3, 1)
 
@@ -3156,6 +3159,7 @@ class ESPNet(nn.Module):
         output1_C = self.level3_C(
             output1_cat
         )  # project to C-dimensional space
+        print(output1_C.shape, output2_c.shape)
         comb_l2_l3 = self.up_l2(
             self.combine_l2_l3(torch.cat([output1_C, output2_c], 1))
         )  # RUM
@@ -3654,7 +3658,7 @@ class InitialBlockENet(nn.Module):
 
         self.main_branch = nn.Conv2d(
             in_channels,
-            out_channels - 3,
+            out_channels - 1,
             kernel_size=kernel_size,
             stride=2,
             padding=padding,
@@ -4489,28 +4493,28 @@ class DABNet(nn.Module):
         self.down_2 = InputInjection(2)  # down-sample the image 2 times
         self.down_3 = InputInjection(3)  # down-sample the image 3 times
 
-        self.bn_prelu_1 = BNPReLU(32 + 3)
+        self.bn_prelu_1 = BNPReLU(32 + 1)
 
         # DAB Block 1
-        self.downsample_1 = DownSamplingBlockDABNet(32 + 3, 64)
+        self.downsample_1 = DownSamplingBlockDABNet(32 + 1, 64)
         self.DAB_Block_1 = nn.Sequential()
         for i in range(0, block_1):
             self.DAB_Block_1.add_module(
                 "DAB_Module_1_" + str(i), DABModule(64, d=2)
             )
-        self.bn_prelu_2 = BNPReLU(128 + 3)
+        self.bn_prelu_2 = BNPReLU(128 + 1)
 
         # DAB Block 2
         dilation_block_2 = [4, 4, 8, 8, 16, 16]
-        self.downsample_2 = DownSamplingBlockDABNet(128 + 3, 128)
+        self.downsample_2 = DownSamplingBlockDABNet(128 + 1, 128)
         self.DAB_Block_2 = nn.Sequential()
         for i in range(0, block_2):
             self.DAB_Block_2.add_module(
                 "DAB_Module_2_" + str(i), DABModule(128, d=dilation_block_2[i])
             )
-        self.bn_prelu_3 = BNPReLU(256 + 3)
+        self.bn_prelu_3 = BNPReLU(256 + 1)
 
-        self.classifier = nn.Sequential(Conv(259, classes, 1, 1, padding=0))
+        self.classifier = nn.Sequential(Conv(257, classes, 1, 1, padding=0))
 
     def forward(self, input):
         output0 = self.init_conv(input)
@@ -5153,22 +5157,22 @@ class CGNet(nn.Module):
             2
         )  # down-sample for Input Injiection, factor=4
 
-        self.b1 = BNPReLU(32 + 3)
+        self.b1 = BNPReLU(32 + 1)
 
         # stage 2
         self.level2_0 = ContextGuidedBlock_Down(
-            32 + 3, 64, dilation_rate=2, reduction=8
+            32 + 1, 64, dilation_rate=2, reduction=8
         )
         self.level2 = nn.ModuleList()
         for i in range(0, M - 1):
             self.level2.append(
                 ContextGuidedBlock(64, 64, dilation_rate=2, reduction=8)
             )  # CG block
-        self.bn_prelu_2 = BNPReLU(128 + 3)
+        self.bn_prelu_2 = BNPReLU(128 + 1)
 
         # stage 3
         self.level3_0 = ContextGuidedBlock_Down(
-            128 + 3, 128, dilation_rate=4, reduction=16
+            128 + 1, 128, dilation_rate=4, reduction=16
         )
         self.level3 = nn.ModuleList()
         for i in range(0, N - 1):

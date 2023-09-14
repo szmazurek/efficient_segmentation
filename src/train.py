@@ -22,6 +22,7 @@ from monai.data import (
 from monai.inferers import SimpleInferer
 from monai.metrics import DiceMetric
 from utils.dataloader_utils import per_patient_split
+from utils.utils import AVAILABLE_MODELS
 
 # import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
 # from lightning.pytorch.callbacks import ModelPruning
@@ -337,103 +338,109 @@ def train_lightning(args):
         wandb_logger = pl.loggers.WandbLogger(
             name=args.exp_name,
         )
+    for model_name in ["MobileNetV3", "Unet", "ERFNet", "SegNet", "ESPNetv2"]:
+        try:
+            model = LightningModel(
+                loss=args.loss_function,
+                model=model_name,
+                in_shape=(None, 1, args.img_size, args.img_size),
+                lr=args.lr,
+            )
+            model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
+                save_top_k=1, mode="min", monitor="val_loss"
+            )
+            early_stopping_callback = pl.callbacks.EarlyStopping(
+                monitor="val_loss",
+                patience=15,
+                mode="min",
+                verbose=True,
+                min_delta=0.001,
+            )
 
-    model = LightningModel(
-        loss=args.loss_function,
-        model=args.model,
-        in_shape=(None, 1, args.img_size, args.img_size),
-        lr=args.lr,
-    )
-    model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        save_top_k=1, mode="min", monitor="val_loss"
-    )
-    early_stopping_callback = pl.callbacks.EarlyStopping(
-        monitor="val_loss",
-        patience=15,
-        mode="min",
-        verbose=True,
-        min_delta=0.001,
-    )
+            lr_finder_callback = pl.callbacks.LearningRateFinder(
+                min_lr=1e-5,
+                max_lr=1e-1,
+                num_training_steps=100,
+            )
 
-    lr_finder_callback = pl.callbacks.LearningRateFinder(
-        min_lr=1e-5,
-        max_lr=1e-1,
-        num_training_steps=100,
-    )
+            strategy = pl.strategies.DDPStrategy(
+                find_unused_parameters=False,
+                static_graph=False,
+            )
 
-    strategy = pl.strategies.DDPStrategy(
-        find_unused_parameters=False,
-        static_graph=False,
-    )
+            torch.set_float32_matmul_precision("medium")
 
-    torch.set_float32_matmul_precision("medium")
+            # strategy = BaguaStrategy(
+            #     algorithm="bytegrad",
+            # )
+            # state = powerSGD.PowerSGDState(
+            #     process_group=None,
+            #     matrix_approximation_rank=1,
+            #     start_powerSGD_iter=1_000,
+            # )
+            # model.register_comm_hook(state, PowerSGD.powerSGD_hook)
+            trainer = pl.Trainer(
+                devices="auto",
+                accelerator="auto",
+                precision="16-mixed",
+                strategy=strategy,
+                num_nodes=1,
+                enable_model_summary=True,
+                max_epochs=args.epochs,
+                logger=wandb_logger if args.wandb else None,
+                callbacks=[
+                    model_checkpoint_callback,
+                    early_stopping_callback,
+                    # lr_finder_callback,
+                ],
+                log_every_n_steps=1,
+                num_sanity_val_steps=0,
+                # gradient_clip_val=1.0,
+                # gradient_clip_algorithm="value",
+            )
+            tracker = OfflineEmissionsTracker(
+                country_iso_code="POL",
+                # output_dir="output_files/codecarbon",
+                # output_file=f"{datetime.datetime.now()}.csv",
+            )
+            tracker.start()
+            trainer.fit(model, train_dataloader, val_loader)
 
-    # strategy = BaguaStrategy(
-    #     algorithm="bytegrad",
-    # )
-    # state = powerSGD.PowerSGDState(
-    #     process_group=None,
-    #     matrix_approximation_rank=1,
-    #     start_powerSGD_iter=1_000,
-    # )
-    # model.register_comm_hook(state, PowerSGD.powerSGD_hook)
-    trainer = pl.Trainer(
-        devices="auto",
-        accelerator="auto",
-        precision="16-mixed",
-        strategy=strategy,
-        num_nodes=1,
-        enable_model_summary=True,
-        max_epochs=args.epochs,
-        logger=wandb_logger if args.wandb else None,
-        callbacks=[
-            model_checkpoint_callback,
-            early_stopping_callback,
-            lr_finder_callback,
-        ],
-        log_every_n_steps=1,
-        num_sanity_val_steps=0,
-        # gradient_clip_val=1.0,
-        # gradient_clip_algorithm="value",
-    )
-    tracker = OfflineEmissionsTracker(
-        country_iso_code="POL",
-        # output_dir="output_files/codecarbon",
-        # output_file=f"{datetime.datetime.now()}.csv",
-    )
-    tracker.start()
-    trainer.fit(model, train_dataloader, val_loader)
+            tracker.stop()
+            energy_training = round(tracker._total_energy.kWh * 3600, 3)
+            tracker = OfflineEmissionsTracker(
+                country_iso_code="POL",
+                # output_dir="output_files/codecarbon",
+                # output_file=f"{datetime.datetime.now()}.csv",
+            )
+            tracker.start()
 
-    tracker.stop()
-    energy_training = round(tracker._total_energy.kWh * 3600, 3)
-    tracker = OfflineEmissionsTracker(
-        country_iso_code="POL",
-        # output_dir="output_files/codecarbon",
-        # output_file=f"{datetime.datetime.now()}.csv",
-    )
-    tracker.start()
+            results = trainer.test(
+                model, dataloaders=test_loader, ckpt_path="best"
+            )
+            tracker.stop()
+            energy_inference = round(tracker._total_energy.kWh * 3600, 3)
+            training_efficiency_measure = (
+                results[0]["test_dice_score"] * 100 - energy_training
+            )
+            total_efficiency_measure = (
+                results[0]["test_dice_score"] * 100
+                - energy_training
+                - energy_inference
+            )
 
-    results = trainer.test(model, dataloaders=test_loader, ckpt_path="best")
-    tracker.stop()
-    energy_inference = round(tracker._total_energy.kWh * 3600, 3)
-    training_efficiency_measure = (
-        results[0]["test_dice_score"] * 100 - energy_training
-    )
-    total_efficiency_measure = (
-        results[0]["test_dice_score"] * 100
-        - energy_training
-        - energy_inference
-    )
-
-    if args.wandb and int(os.environ["SLURM_PROCID"]) == 0:
-        wandb.log(
-            {
-                "energy_training_kJ": energy_training,
-                "energy_inference_kJ": energy_inference,
-                "energy_total_kJ": energy_training + energy_inference,
-                "training_efficiency_measure": training_efficiency_measure,
-                "total_efficiency_measure": total_efficiency_measure,
-            }
-        )
-        wandb.finish()
-    print("Finished training.")
+            if args.wandb and int(os.environ["SLURM_PROCID"]) == 0:
+                wandb.log(
+                    {
+                        "energy_training_kJ": energy_training,
+                        "energy_inference_kJ": energy_inference,
+                        "energy_total_kJ": energy_training + energy_inference,
+                        "training_efficiency_measure": training_efficiency_measure,
+                        "total_efficiency_measure": total_efficiency_measure,
+                    }
+                )
+                wandb.finish()
+            print("Finished training.")
+        except Exception as e:
+            print(e)
+            print(f"Training failed. Model used: {model_name}")

@@ -9,7 +9,6 @@ from models.torch_models import (
     ENet,
     ERFNet,
     ESNet,
-    ESPNet,
     FPENet,
     FSSNet,
     LinkNet,
@@ -32,7 +31,6 @@ AVAILABLE_MODELS = [
     "LinkNet",
     "FSSNet",
     "FPENet",
-    "ESPNet",
     "ESNet",
     "ERFNet",
     "ENet",
@@ -64,8 +62,6 @@ def return_chosen_model(model_name, in_channels, in_shape, init_features):
         return FSSNet(classes=in_channels)
     elif model_name == "FPENet":
         return FPENet(classes=in_channels)
-    elif model_name == "ESPNet":
-        return ESPNet(classes=in_channels)
     elif model_name == "ESNet":
         return ESNet(classes=in_channels)
     elif model_name == "ERFNet":

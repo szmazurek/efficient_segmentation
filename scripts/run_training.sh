@@ -38,13 +38,13 @@ srun -u python  src/main.py \
     --training_data_path data/open_neuro_mixed/ \
     --lr 0.001 \
     --num_classes 1 \
-    --epochs 200 \
+    --epochs 1 \
     --img_size 256 \
     --batch_size 256 \
     --model MobileNetV3 \
     --loss_function DiceLoss \
     --exp_name "mobilenet-nccl-debug" \
     --n_workers 6 \
-    --wandb
+    # --wandb
 
 

@@ -209,7 +209,7 @@ class EESPNet(nn.Module):
         # print('Config: ', config)
 
         global config_inp_reinf
-        config_inp_reinf = 3
+        config_inp_reinf = 1
         self.input_reinforcement = True
         assert len(K) == len(
             r_lim
