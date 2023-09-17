@@ -117,9 +117,10 @@ def test_lightning(args):
         test_dataset,
         batch_size=1,
         num_workers=6,
-        pefetch_factor=10,
+        prefetch_factor=10,
         pin_memory=True,
         shuffle=False,
+        drop_last=False,
     )
 
     model = LightningModel.load_from_checkpoint(
