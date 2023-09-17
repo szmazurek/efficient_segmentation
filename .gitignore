@@ -1,3 +1,12 @@
 __pycache__/
-models
-data/test_results_saved
+data/test_results/
+data/dummy_results/
+output_files
+wandb_api_key.txt
+*logs/
+lightning-Bagua/
+bagua/
+wandb/
+open_neuro*/
+*.ckpt
+*.csv
