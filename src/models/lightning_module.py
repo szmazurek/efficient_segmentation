@@ -141,7 +141,6 @@ class LightningModel(pl.LightningModule):
             self.parameters(),
             lr=self.lr,
             amsgrad=True,
-            # weight_decay=0.001,
         )
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
@@ -150,6 +149,7 @@ class LightningModel(pl.LightningModule):
             patience=5,
             verbose=True,
             threshold=0.001,
+            min_lr=1e-6,
         )
 
         return {

@@ -203,6 +203,6 @@ def test_lightning(args):
         predict_transforms=post_transforms,
     )
     trainer = pl.Trainer(
-        devices=1, accelerator="gpu", num_nodes=1, precision="16-mixed"
+        devices=4, accelerator="gpu", num_nodes=1, precision="16-mixed"
     )
     trainer.predict(model, test_dataloader)

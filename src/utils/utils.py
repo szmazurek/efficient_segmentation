@@ -22,23 +22,23 @@ from segmentation_models_pytorch.losses import DiceLoss, MCCLoss
 from torch.nn.functional import binary_cross_entropy_with_logits
 
 AVAILABLE_MODELS = [
-    "Unet",
+    # "Unet",
     "AttSqueezeUnet",
-    "MobileNetV3",
-    "MicroNet",
-    "SegNet",
+    # "MobileNetV3",
+    # "MicroNet",
+    # "SegNet",
     "SQNet",
     "LinkNet",
-    "FSSNet",
-    "FPENet",
-    "ESNet",
-    "ERFNet",
+    # "FSSNet",
+    # "FPENet",
+    # "ESNet",
+    # "ERFNet",
     "ENet",
-    "EDANet",
-    "DABNet",
-    "ContextNet",
-    "CGNet",
-    "ESPNetv2",
+    # "EDANet",
+    # "DABNet",
+    # "ContextNet",
+    # "CGNet",
+    # "ESPNetv2",
 ]
 AVAILABLE_LOSSES = ["DiceLoss", "MCCLoss", "BCE"]
 

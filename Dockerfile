@@ -1,23 +1,18 @@
 FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu20.04
 
-ENV PATH="/root/miniconda3/bin:${PATH}"
-ARG PATH="/root/miniconda3/bin:${PATH}"
 RUN apt-get update
 
-RUN apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get install -y wget && apt-get install -y curl &&\
+    apt-get install -y software-properties-common
 
-RUN wget \
-    https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
-    && mkdir /root/.conda \
-    && bash Miniconda3-latest-Linux-x86_64.sh -b \
-    && rm -f Miniconda3-latest-Linux-x86_64.sh 
-RUN conda --version
-
+RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update && \ 
+    apt-get install -y python3.11 && \
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 && \
+    rm -rf /var/lib/apt/lists/*
 
 
 WORKDIR  /efficient_segmentation
 COPY ./ /efficient_segmentation/
-RUN ls -a
-RUN pip install -r requirements.txt
+RUN pip3.11 install -r requirements.txt
 
-ENTRYPOINT ["python3", "src/main.py"]
+ENTRYPOINT ["python3.11", "src/main.py"]
