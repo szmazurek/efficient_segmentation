@@ -1,32 +1,28 @@
 import os
-import numpy as np
-
-import torch
-import lightning.pytorch as pl
-from models.lightning_module import LightningModel
+import warnings
 from glob import glob
 
-from monai import config
-from monai.data import decollate_batch, DataLoader, Dataset
-from monai.inferers import SliceInferer
-from monai.networks.nets import UNet
+import lightning.pytorch as pl
+import numpy as np
+import torch
+from models.lightning_module import LightningModel
+from monai.data import DataLoader, Dataset
 from monai.transforms import (
     Activationsd,
-    LoadImaged,
     AsDiscreted,
-    ResizeWithPadOrCropd,
-    RemoveSmallObjectsd,
+    Compose,
     EnsureChannelFirstd,
     Invertd,
-    Compose,
-    Spacingd,
+    LoadImaged,
     MapTransform,
+    RemoveSmallObjectsd,
+    ResizeWithPadOrCropd,
     SaveImaged,
+    Spacingd,
 )
 
-import warnings
-
 warnings.filterwarnings("ignore")
+torch.set_float32_matmul_precision("medium")
 
 
 class SliceWiseNormalizeIntensityd(MapTransform):
@@ -69,79 +65,6 @@ class SliceWiseNormalizeIntensityd(MapTransform):
                 image[..., i] = slice_
             d[key] = image
         return d
-
-
-def test(args):
-    config.print_config()
-
-    test_transforms = Compose(
-        [
-            LoadImaged(keys=["image"]),
-            EnsureChannelFirstd(keys=["image"]),
-            Spacingd(keys="image", pixdim=(1.0, 1.0, -1.0), mode="bilinear"),
-            SliceWiseNormalizeIntensityd(keys=["image"], nonzero=True),
-            ResizeWithPadOrCropd(
-                keys="image", spatial_size=(args.img_size, args.img_size, -1)
-            ),
-        ]
-    )
-
-    # load data
-    test_images = sorted(
-        glob(os.path.join(args.testing_data_path, "*.nii.gz"))
-    )
-    test_files = [{"image": image_name} for image_name in test_images]
-
-    test_dataset = Dataset(data=test_files, transform=test_transforms)
-    test_dataloader = DataLoader(test_dataset, batch_size=1, num_workers=0)
-
-    post_transforms = Compose(
-        [
-            Invertd(
-                keys="pred",
-                transform=test_transforms,
-                orig_keys="image",
-                meta_keys="pred_meta_dict",
-                orig_meta_keys="image_meta_dict",
-                meta_key_postfix="meta_dict",
-                nearest_interp=False,
-                to_tensor=True,
-            ),
-            Activationsd(keys="pred", softmax=True),
-            AsDiscreted(keys="pred", argmax=True, to_onehot=None),
-            RemoveSmallObjectsd(keys="pred", min_size=50, connectivity=1),
-            SaveImaged(
-                keys="pred",
-                meta_keys="pred_meta_dict",
-                output_dir=args.test_save_path,
-                separate_folder=False,
-                output_postfix="maskpred",
-                resample=False,
-            ),
-        ]
-    )
-
-    device = args.device
-    model = UNet(
-        spatial_dims=2,
-        in_channels=1,
-        out_channels=2,
-        channels=(32, 64, 128, 256, 512),
-        strides=(2, 2, 2, 2),
-    ).to(device)
-    model.load_state_dict(torch.load(args.model_path))
-
-    inferer = SliceInferer(roi_size=(256, 256), spatial_dim=2, progress=False)
-
-    with torch.no_grad():
-        model.eval()
-        for i, test_data in enumerate(test_dataloader):
-            test_inputs = test_data["image"].to(device)
-
-            test_data["pred"] = inferer(test_inputs, model)
-            test_data = [
-                post_transforms(i) for i in decollate_batch(test_data)
-            ]
 
 
 def test_lightning(args):
@@ -202,7 +125,15 @@ def test_lightning(args):
         save_dir=args.test_results_save_path,
         predict_transforms=post_transforms,
     )
+    strategy = pl.strategies.DDPStrategy(
+        find_unused_parameters=False,
+        static_graph=True,
+    )
     trainer = pl.Trainer(
-        devices=4, accelerator="gpu", num_nodes=1, precision="16-mixed"
+        devices="auto",
+        accelerator="auto",
+        num_nodes=1,
+        precision="16-mixed",
+        strategy=strategy,
     )
     trainer.predict(model, test_dataloader)

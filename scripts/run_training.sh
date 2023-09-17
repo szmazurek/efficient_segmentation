@@ -5,11 +5,11 @@
 #SBATCH -N 1
 ## Liczba zadań per węzeł (domyślnie jest to liczba alokowanych rdzeni na węźle)
 #SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=4
 ## Ilość pamięci przypadającej na jeden rdzeń obliczeniowy (domyślnie 4GB na rdzeń)
-#SBATCH --mem=500GB
+#SBATCH --mem=30GB
 ## Maksymalny czas trwania zlecenia (format HH:MM:SS)
-#SBATCH --time=0:30:00
+#SBATCH --time=0:05:00
 ## Nazwa grantu do rozliczenia zużycia zasobów
 #SBATCH -A plgsano4-gpu-a100
 ## Specyfikacja partycjii da
@@ -36,6 +36,7 @@ export OMPI_MCA_opal_cuda_support=true
 srun -u python  src/main.py \
     --train \
     --training_data_path data/open_neuro_mixed/ \
+    --validation_data_path data/validation_data/ \
     --lr 0.001 \
     --num_classes 1 \
     --epochs 150 \

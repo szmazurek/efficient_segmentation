@@ -6,6 +6,9 @@ import math
 from torchvision.models import resnet
 from .activations import NON_LINEARITY
 
+"""Some models come from
+https://github.com/xiaoyufenfei/Efficient-Segmentation-Networks"""
+
 
 class UNet(nn.Module):
     def __init__(

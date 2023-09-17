@@ -1,6 +1,7 @@
-from train import train_lightning
-from test import test_lightning
 import argparse
+from test import test_lightning
+
+from train import train_lightning
 from utils.utils import AVAILABLE_LOSSES, AVAILABLE_MODELS
 
 parser = argparse.ArgumentParser()
@@ -14,6 +15,11 @@ parser.add_argument(
 )
 parser.add_argument(
     "--training_data_path", type=str, help="Set the path to training dataset"
+)
+parser.add_argument(
+    "--validation_data_path",
+    type=str,
+    help="Set the path to validation dataset",
 )
 parser.add_argument(
     "--testing_data_path",

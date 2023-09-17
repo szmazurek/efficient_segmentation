@@ -1,11 +1,11 @@
-import torch
 import lightning.pytorch as pl
-from torchmetrics import Dice
+import torch
 from monai.data import decollate_batch
+from monai.inferers import SliceInferer
 from monai.optimizers import Novograd
 from monai.transforms import Compose
-from monai.inferers import SliceInferer
-from utils.utils import return_chosen_model, return_chosen_loss
+from torchmetrics import Dice
+from utils.utils import return_chosen_loss, return_chosen_model
 
 
 class LightningModel(pl.LightningModule):
@@ -41,25 +41,25 @@ class LightningModel(pl.LightningModule):
 
         y_hat = self(x)
         loss = self.loss(y_hat.float(), y.float())
-        dice_score = self.dice_score(y_hat, y.int())
-        self.log(
-            "dice_score",
-            dice_score,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=True,
-        )
-        self.log(
-            "train_loss",
-            loss,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=True,
-        )  # disable for final version
+        # dice_score = self.dice_score(y_hat, y.int())
+        # self.log(
+        #     "dice_score",
+        #     dice_score,
+        #     on_step=True,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     logger=True,
+        #     sync_dist=True,
+        # )
+        # self.log(
+        #     "train_loss",
+        #     loss,
+        #     on_step=True,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     logger=True,
+        #     sync_dist=True,
+        # )  # disable for final version
 
         return loss
 
@@ -69,23 +69,23 @@ class LightningModel(pl.LightningModule):
         y_hat = self(x)
 
         loss = self.loss(y_hat.float(), y.float())
-        dice_score = self.dice_score(y_hat, y.int())
-        self.log(
-            "val_dice_score",
-            dice_score,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=True,
-        )
+        # dice_score = self.dice_score(y_hat, y.int())
+        # self.log(
+        #     "val_dice_score",
+        #     dice_score,
+        #     on_step=False,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     logger=True,
+        #     sync_dist=True,
+        # )
         self.log(
             "val_loss",
             loss,
             on_step=False,
             on_epoch=True,
-            prog_bar=True,
-            logger=True,
+            # prog_bar=True,
+            # logger=True,
             sync_dist=True,
         )
         return loss
@@ -102,18 +102,18 @@ class LightningModel(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
-            logger=True,
+            # logger=True,
             sync_dist=True,
         )
-        self.log(
-            "test_loss",
-            loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=True,
-        )
+        # self.log(
+        #     "test_loss",
+        #     loss,
+        #     on_step=False,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     logger=True,
+        #     sync_dist=True,
+        # )
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
