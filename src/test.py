@@ -113,7 +113,14 @@ def test_lightning(args):
     test_files = [{"image": image_name} for image_name in test_images]
 
     test_dataset = Dataset(data=test_files, transform=test_transforms)
-    test_dataloader = DataLoader(test_dataset, batch_size=1, num_workers=6)
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=1,
+        num_workers=6,
+        pefetch_factor=10,
+        pin_memory=True,
+        shuffle=False,
+    )
 
     model = LightningModel.load_from_checkpoint(
         args.model_path,
