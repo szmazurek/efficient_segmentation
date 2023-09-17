@@ -4,15 +4,19 @@ from glob import glob
 import lightning.pytorch as pl
 import monai.transforms as tr
 import torch
-import wandb
 from models.lightning_module import LightningModel
 from monai.data import CacheDataset, DataLoader, partition_dataset
+
+#####################################################
+from .utils.dataloader_utils import per_patient_split
+
+#####################################################
 
 torch.set_float32_matmul_precision("medium")
 
 
 pl.seed_everything(42)
-N_PROC = torch.cuda.device_count()
+N_PROC = torch.cuda.device_count() if torch.cuda.is_available() else 1
 
 
 def train_lightning(args):
@@ -77,18 +81,6 @@ def train_lightning(args):
         ]
     )
 
-    if args.wandb:
-        if int(os.environ["SLURM_PROCID"]) == 0:
-            wandb.init(
-                entity="mazurek",
-                project="E2MIP_Challenge_FetalBrainSegmentation",
-                group="all-models-eval-final",
-                name=f"{args.exp_name}",
-            )
-        wandb_logger = pl.loggers.WandbLogger(
-            name=args.exp_name,
-        )
-
     model = LightningModel(
         loss=args.loss_function,
         model=args.model,
@@ -96,7 +88,11 @@ def train_lightning(args):
         lr=args.lr,
     )
     model_checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        save_top_k=1, mode="min", monitor="val_loss"
+        save_top_k=1,
+        mode="min",
+        monitor="val_loss",
+        dirpath="checkpoints/",
+        filename="best_model",
     )
     early_stopping_callback = pl.callbacks.EarlyStopping(
         monitor="val_loss",
@@ -125,7 +121,6 @@ def train_lightning(args):
         num_nodes=1,
         enable_model_summary=True,
         max_epochs=args.epochs,
-        logger=wandb_logger if args.wandb else None,
         callbacks=[
             model_checkpoint_callback,
             early_stopping_callback,
@@ -134,16 +129,19 @@ def train_lightning(args):
         log_every_n_steps=1,
         num_sanity_val_steps=0,
     )
-    print("Global rank:")
-    global_rank = int(trainer.global_rank)
-    print(global_rank)
+    GLOBAL_RANK = int(trainer.global_rank)
+    #####################################################
+    train_files, validation_files, _ = per_patient_split(
+        train_files, 0.05, 0.1
+    )
+    #####################################################
     train_data_partitioned = partition_dataset(
         data=train_files,
         num_partitions=N_PROC,
         shuffle=True,
         even_divisible=False,
         seed=42,
-    )[global_rank]
+    )[GLOBAL_RANK]
 
     val_data_partitioned = partition_dataset(
         data=validation_files,
@@ -151,24 +149,24 @@ def train_lightning(args):
         shuffle=True,
         even_divisible=False,
         seed=42,
-    )[global_rank]
+    )[GLOBAL_RANK]
 
     train_dataset = CacheDataset(
         data=train_data_partitioned,
         transform=transformations,
-        num_workers=30,
+        num_workers=20,
     )
     val_dataset = CacheDataset(
         data=val_data_partitioned,
         transform=transformations_val_test,
-        num_workers=30,
+        num_workers=20,
     )
 
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=args.n_workers,
+        num_workers=6,
         pin_memory=True,
         prefetch_factor=20,
         drop_last=False,
@@ -178,7 +176,7 @@ def train_lightning(args):
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=args.n_workers,
+        num_workers=6,
         pin_memory=True,
         prefetch_factor=5,
         drop_last=False,
@@ -186,5 +184,4 @@ def train_lightning(args):
     )
 
     trainer.fit(model, train_dataloader, val_loader)
-    wandb.finish()
     print("Finished training.")

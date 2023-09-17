@@ -54,12 +54,7 @@ parser.add_argument(
     default=2,
     help="Number of classes / number of output layers",
 )
-parser.add_argument(
-    "--wandb",
-    action="store_true",
-    default=False,
-    help="Use True to log the training process to wandb",
-)
+
 parser.add_argument(
     "--model",
     type=str,
@@ -72,15 +67,8 @@ parser.add_argument(
     default="DiceLoss",
     help=f"Loss function to be used for training, one of {AVAILABLE_LOSSES}",
 )
-parser.add_argument(
-    "--exp_name",
-    type=str,
-    default="my_run",
-    help="Experiment name for logging to wandb",
-)
-parser.add_argument(
-    "--n_workers", type=int, default=4, help="Number of workers"
-)
+
+
 args = parser.parse_args()
 
 
