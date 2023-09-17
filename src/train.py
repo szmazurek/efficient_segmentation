@@ -7,10 +7,6 @@ import torch
 from models.lightning_module import LightningModel
 from monai.data import CacheDataset, DataLoader, partition_dataset
 
-#####################################################
-from .utils.dataloader_utils import per_patient_split
-
-#####################################################
 
 torch.set_float32_matmul_precision("medium")
 
@@ -130,11 +126,6 @@ def train_lightning(args):
         num_sanity_val_steps=0,
     )
     GLOBAL_RANK = int(trainer.global_rank)
-    #####################################################
-    train_files, validation_files, _ = per_patient_split(
-        train_files, 0.05, 0.1
-    )
-    #####################################################
     train_data_partitioned = partition_dataset(
         data=train_files,
         num_partitions=N_PROC,
