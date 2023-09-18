@@ -138,8 +138,7 @@ def test_lightning(args):
     )
     if not os.path.exists("lightning_logs"):
         os.mkdir("lightning_logs")
-    if not os.path.exists(args.test_results_save_path):
-        os.mkdir(args.test_results_save_path)
+
     trainer = pl.Trainer(
         devices="auto",
         accelerator="auto",
