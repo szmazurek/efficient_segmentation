@@ -9,7 +9,7 @@ RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update && \
     apt-get install -y python3.11 && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 && \
     rm -rf /var/lib/apt/lists/*
-RUN pwd
+RUN ls
 RUN git clone https://github.com/szmazurek/efficient_segmentation.git
 RUN rm -rf /efficient_segmentation/data /efficient_segmentation/scripts \
     .gitignore Dockerfile README.md

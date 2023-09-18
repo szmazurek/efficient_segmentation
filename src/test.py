@@ -135,6 +135,8 @@ def test_lightning(args):
         find_unused_parameters=False,
         static_graph=True,
     )
+    if not os.path.exists("lightning_logs"):
+        os.mkdir("lightning_logs")
     trainer = pl.Trainer(
         devices="auto",
         accelerator="auto",
