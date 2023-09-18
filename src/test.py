@@ -131,12 +131,15 @@ def test_lightning(args):
         save_dir=args.test_results_save_path,
         predict_transforms=post_transforms,
     )
+    print(f"Loaded model from {args.model_path}")
     strategy = pl.strategies.DDPStrategy(
         find_unused_parameters=False,
         static_graph=True,
     )
     if not os.path.exists("lightning_logs"):
         os.mkdir("lightning_logs")
+    if not os.path.exists(args.test_results_save_path):
+        os.mkdir(args.test_results_save_path)
     trainer = pl.Trainer(
         devices="auto",
         accelerator="auto",
@@ -144,4 +147,6 @@ def test_lightning(args):
         precision="16-mixed",
         strategy=strategy,
     )
+
     trainer.predict(model, test_dataloader)
+    print("Prediction finished!")
