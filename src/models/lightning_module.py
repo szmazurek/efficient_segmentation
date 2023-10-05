@@ -1,6 +1,5 @@
 import lightning.pytorch as pl
 import torch
-from monai.data import decollate_batch
 from monai.inferers import SliceInferer
 from monai.optimizers import Novograd
 from monai.transforms import Compose
@@ -17,7 +16,7 @@ class LightningModel(pl.LightningModule):
         init_features=64,
         lr=1e-3,
         in_shape=(None, 1, 256, 256),
-        predict_transforms: Compose = None,
+        predict_transforms: Compose | None = None,
         save_dir="data/dummy_results",
     ):
         super().__init__()
@@ -123,17 +122,10 @@ class LightningModel(pl.LightningModule):
             spatial_dim=2,
             progress=False,
         )
-        y_hat = inferer(x, self.model)
-        # #### THIS DOES NOT WORK ON OPENNEURO
-        # THIS IS DUE TO SOME PROBLEMS WITH INVERSION OF
-        # AFFINE TRANSFORMS. THIS VERSION RUNS ON 3D VOLUMES ONLY FROM
-        # THE DATASET PROVIDED BY THE CHALLENGE.
-        # #####
-        batch_copied = batch.copy()
-        batch_copied["pred"] = y_hat
-        batch_copied = [
-            self.predict_transforms(i) for i in decollate_batch(batch_copied)
-        ]
+        y_hat = {}
+        y_hat["image"] = x[0]
+        y_hat["pred"] = inferer(x, self.model)[0]
+        self.predict_transforms(y_hat)
         return y_hat
 
     def configure_optimizers(self):

@@ -14,7 +14,7 @@
 #SBATCH -A plgsano4-gpu-a100
 ## Specyfikacja partycji
 #SBATCH --partition plgrid-gpu-a100
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus=4
 ## Plik ze standardowym wyjściem
 #SBATCH --output="output_files/stdout_test.out"
 ## Plik ze standardowym wyjściem błędó0w

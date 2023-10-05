@@ -8,14 +8,12 @@ import torch
 from models.lightning_module import LightningModel
 from monai.data import DataLoader, Dataset
 from monai.transforms import (
-    Activationsd,
     AsDiscreted,
     Compose,
     EnsureChannelFirstd,
     Invertd,
     LoadImaged,
     MapTransform,
-    RemoveSmallObjectsd,
     ResizeWithPadOrCropd,
     SaveImaged,
     Spacingd,
@@ -92,9 +90,9 @@ def test_lightning(args):
                 nearest_interp=False,
                 to_tensor=True,
             ),
-            Activationsd(keys="pred", softmax=True),
-            AsDiscreted(keys="pred", argmax=True, to_onehot=None),
-            RemoveSmallObjectsd(keys="pred", min_size=50, connectivity=1),
+            AsDiscreted(
+                keys="pred", argmax=False, to_onehot=None, threshold=0.1
+            ),
             SaveImaged(
                 keys="pred",
                 meta_keys="pred_meta_dict",
@@ -106,7 +104,6 @@ def test_lightning(args):
         ]
     )
 
-    # load data
     test_images = sorted(
         glob(os.path.join(args.testing_data_path, "*.nii.gz"))
     )
@@ -117,7 +114,7 @@ def test_lightning(args):
         test_dataset,
         batch_size=1,
         num_workers=6,
-        pefetch_factor=10,
+        prefetch_factor=10,
         pin_memory=True,
         shuffle=False,
     )
@@ -141,4 +138,5 @@ def test_lightning(args):
         precision="16-mixed",
         strategy=strategy,
     )
+
     trainer.predict(model, test_dataloader)

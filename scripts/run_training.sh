@@ -37,7 +37,7 @@ srun -u python  src/main.py \
     --model_path checkpoints/best_model.ckpt \
     --lr 0.001 \
     --num_classes 1 \
-    --epochs 150 \
+    --epochs 1 \
     --img_size 256 \
     --batch_size 128 \
     --model AttSqueezeUnet \
