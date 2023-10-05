@@ -117,6 +117,7 @@ def test_lightning(args):
         prefetch_factor=10,
         pin_memory=True,
         shuffle=False,
+        drop_last=False,
     )
 
     model = LightningModel.load_from_checkpoint(
@@ -127,10 +128,14 @@ def test_lightning(args):
         save_dir=args.test_results_save_path,
         predict_transforms=post_transforms,
     )
+    print(f"Loaded model from {args.model_path}")
     strategy = pl.strategies.DDPStrategy(
         find_unused_parameters=False,
         static_graph=True,
     )
+    if not os.path.exists("lightning_logs"):
+        os.mkdir("lightning_logs")
+
     trainer = pl.Trainer(
         devices="auto",
         accelerator="auto",
@@ -140,3 +145,4 @@ def test_lightning(args):
     )
 
     trainer.predict(model, test_dataloader)
+    print("Prediction finished!")
