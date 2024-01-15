@@ -40,25 +40,25 @@ class LightningModel(pl.LightningModule):
 
         y_hat = self(x)
         loss = self.loss(y_hat.float(), y.float())
-        # dice_score = self.dice_score(y_hat, y.int())
-        # self.log(
-        #     "dice_score",
-        #     dice_score,
-        #     on_step=True,
-        #     on_epoch=True,
-        #     prog_bar=True,
-        #     logger=True,
-        #     sync_dist=True,
-        # )
-        # self.log(
-        #     "train_loss",
-        #     loss,
-        #     on_step=True,
-        #     on_epoch=True,
-        #     prog_bar=True,
-        #     logger=True,
-        #     sync_dist=True,
-        # )  # disable for final version
+        dice_score = self.dice_score(y_hat, y.int())
+        self.log(
+            "dice_score",
+            dice_score,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )
+        self.log(
+            "train_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )  # disable for final version
 
         return loss
 
@@ -68,23 +68,23 @@ class LightningModel(pl.LightningModule):
         y_hat = self(x)
 
         loss = self.loss(y_hat.float(), y.float())
-        # dice_score = self.dice_score(y_hat, y.int())
-        # self.log(
-        #     "val_dice_score",
-        #     dice_score,
-        #     on_step=False,
-        #     on_epoch=True,
-        #     prog_bar=True,
-        #     logger=True,
-        #     sync_dist=True,
-        # )
+        dice_score = self.dice_score(y_hat, y.int())
+        self.log(
+            "val_dice_score",
+            dice_score,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )
         self.log(
             "val_loss",
             loss,
             on_step=False,
             on_epoch=True,
-            # prog_bar=True,
-            # logger=True,
+            prog_bar=True,
+            logger=True,
             sync_dist=True,
         )
         return loss
@@ -104,15 +104,15 @@ class LightningModel(pl.LightningModule):
             # logger=True,
             sync_dist=True,
         )
-        # self.log(
-        #     "test_loss",
-        #     loss,
-        #     on_step=False,
-        #     on_epoch=True,
-        #     prog_bar=True,
-        #     logger=True,
-        #     sync_dist=True,
-        # )
+        self.log(
+            "test_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):

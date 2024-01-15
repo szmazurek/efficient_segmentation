@@ -24,7 +24,7 @@ parser.add_argument(
 parser.add_argument(
     "--testing_data_path",
     type=str,
-    help="Set the path to testing data (for internal testing",
+    help="Set the path to testing data (for internal testing)",
 )
 parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
 parser.add_argument(
